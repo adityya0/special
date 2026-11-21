@@ -122,6 +122,9 @@ function updateUI() {
   document.querySelectorAll('.scene-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.scene === state.scene);
   });
+  document.querySelectorAll('#inline-acc-picker .acc-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.acc === state.acc);
+  });
   updateHugButton();
 }
 
@@ -948,7 +951,7 @@ function drawCage() {
     if (h.mode !== 'sleep') {
       drawAccessory(ctx, h.x, h.y, h.acc, 2);
     }
-    const tagY = h.acc && h.acc !== 'none' && h.acc !== 'glasses' ? h.y - 43 : h.y - 38;
+    const tagY = h.acc && h.acc !== 'none' && h.acc !== 'glasses' ? h.y - 46 : h.y - 38;
     drawNameTag(h.x, tagY, h.name, h.id === coop.clientId);
   }
 
@@ -1029,6 +1032,15 @@ canvas.addEventListener('mousemove', (e) => {
 // Scene switcher
 document.querySelectorAll('.scene-btn').forEach((btn) => {
   btn.addEventListener('click', () => applyAction('scene', { scene: btn.dataset.scene }));
+});
+
+// Inline Dress Code switcher (langsung di dalam game!)
+document.querySelectorAll('#inline-acc-picker .acc-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    await saveMyProfile(state.name, state.fur, btn.dataset.acc);
+    sfx.squeak();
+    showToast(`Ganti dress code: ${btn.textContent}`);
+  });
 });
 
 // Button bindings

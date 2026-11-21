@@ -317,6 +317,22 @@ body {
   gap: 8px;
 }
 
+.acc-inline-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.acc-btn {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.acc-btn.active {
+  background: #ffd166;
+  font-weight: 700;
+}
+
 .activity-panel {
   max-height: 195px;
   display: flex;

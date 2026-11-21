@@ -332,6 +332,47 @@ const ACCESSORY_SPRITES = {
       '.OOO....OOO.',
     ],
   },
+  beanie: {
+    yOffset: -38,
+    mat: [
+      '....OOO....',
+      '...OWWWO...',
+      '..OBBBBBO..',
+      '.OBBBBBBBBO',
+      '.ORRRRRRRRO',
+      '.OOOOOOOOOO',
+    ],
+  },
+  cap: {
+    yOffset: -36,
+    mat: [
+      '..OOOOOO...',
+      '.OCCCCCCOO.',
+      'OCCCCCCCCCO',
+      'OOOOOOCCCCO',
+      '......OOOO.',
+    ],
+  },
+  bunny: {
+    yOffset: -42,
+    mat: [
+      '.OO.....OO.',
+      'OWPO...OWPO',
+      'OWPO...OWPO',
+      'OWPO...OWPO',
+      '.OO.OOO.OO.',
+    ],
+  },
+  witch: {
+    yOffset: -40,
+    mat: [
+      '.....OO....',
+      '....OPPO...',
+      '...OPPPPO..',
+      '..OYYYYYYO.',
+      'OOOOOOOOOOO',
+    ],
+  },
 };
 
 const ACC_COLORS = {
@@ -342,6 +383,8 @@ const ACC_COLORS = {
   R: '#ff4d6d',
   G: '#38b000',
   K: '#1d1e2c',
+  B: '#54a0ff',
+  C: '#48dbfb',
 };
 
 export function drawAccessory(ctx, x, y, type, scale = 2) {
