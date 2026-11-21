@@ -77,6 +77,17 @@ const particles = []; // { kind, x, y, vx, vy, life, text, color }
 let remoteCursor = null; // { x, y, name, expiresAt }
 let lastMeetHeart = 0;
 
+// 2-Player Co-op Mini-Game: Lompat Duri & Kumpul Biji (Bisa Mati!)
+const miniGame = {
+  active: false,
+  gameOver: false,
+  score: 0,
+  speed: 115,
+  spawnTimer: 1.0,
+  obstacles: [], // { kind: 'spike' | 'seed', x, y, w, h }
+  deadIds: new Set(),
+};
+
 // UI Elements
 const elTitle = document.getElementById('pet-title');
 const elPresencePill = document.getElementById('presence-pill');
@@ -119,9 +130,11 @@ function updateUI() {
   bars.hygiene.style.width = `${clamp(state.hygiene)}%`;
   document.getElementById('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
   document.getElementById('btn-sleep').textContent = state.night ? '☀️ Lampu' : '🌙 Lampu';
-  document.querySelectorAll('.scene-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.scene === state.scene);
+  document.querySelectorAll('.scene-btn[data-scene]').forEach((b) => {
+    b.classList.toggle('active', !miniGame.active && b.dataset.scene === state.scene);
   });
+  const mgBtn = document.getElementById('btn-minigame');
+  if (mgBtn) mgBtn.classList.toggle('active', miniGame.active);
   document.querySelectorAll('#inline-acc-picker .acc-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.acc === state.acc);
   });
@@ -418,6 +431,8 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
       break;
     }
     case 'scene': {
+      miniGame.active = false;
+      miniGame.gameOver = false;
       const nextScene = data.scene || 'cage';
       state.scene = nextScene;
       const labels = { cage: '🏠 Kandang', garden: '🌿 Taman Rumput', explore: '⛺ Explore Bukit' };
@@ -429,6 +444,55 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
       }
       showToast(`Pindah ke ${labels[nextScene] || nextScene}!`);
       addLog(`${actor} ajak pindah ke ${labels[nextScene] || nextScene}`);
+      break;
+    }
+    case 'mg_start': {
+      miniGame.active = true;
+      miniGame.gameOver = false;
+      miniGame.score = 0;
+      miniGame.speed = 115;
+      miniGame.spawnTimer = 0.8;
+      miniGame.obstacles = [];
+      miniGame.deadIds.clear();
+      let idx = 0;
+      for (const h of hamsters.values()) {
+        h.inTunnel = false;
+        h.mode = 'wander';
+        h.x = 68 + idx * 46;
+        h.y = FLOOR_Y;
+        h.vy = 0;
+        h.flip = false;
+        idx++;
+      }
+      showToast('🎮 Mini-Game Mulai! Spasi / Tap untuk Lompat!');
+      addLog(`${actor} mulai Mini-Game Lompat Duri!`);
+      break;
+    }
+    case 'mg_jump': {
+      if (targetHammy && !miniGame.deadIds.has(targetHammy.id) && targetHammy.y >= FLOOR_Y - 2) {
+        targetHammy.vy = -175;
+        sfx.squeak();
+      }
+      break;
+    }
+    case 'mg_die': {
+      if (targetHammy && !miniGame.deadIds.has(targetHammy.id)) {
+        miniGame.deadIds.add(targetHammy.id);
+        sfx.sleep();
+        spawnParticles('text', targetHammy.x - 10, targetHammy.y - 34, 1, {
+          text: '💀 MATI!',
+          color: '#ff4d6d',
+        });
+        addLog(`💀 ${targetHammy.name} kena duri!`);
+        if (miniGame.deadIds.size >= hamsters.size) {
+          miniGame.gameOver = true;
+          showToast(`💀 GAME OVER! Skor Tim: ${miniGame.score}`);
+        }
+      }
+      break;
+    }
+    case 'mg_score': {
+      miniGame.score = Math.max(miniGame.score, data.score || miniGame.score + 10);
       break;
     }
     case 'hug': {
@@ -510,7 +574,80 @@ function pickNextBehavior(h) {
   }
 }
 
+function updateMiniGame(dt) {
+  if (!miniGame.gameOver) {
+    miniGame.speed = Math.min(210, miniGame.speed + dt * 3.5);
+    miniGame.spawnTimer -= dt;
+    if (miniGame.spawnTimer <= 0) {
+      miniGame.spawnTimer = 0.85 + Math.random() * 0.85;
+      const isSeed = Math.random() < 0.42;
+      miniGame.obstacles.push({
+        kind: isSeed ? 'seed' : 'spike',
+        x: W + 16,
+        y: isSeed ? FLOOR_Y - 14 - Math.random() * 24 : FLOOR_Y,
+      });
+    }
+
+    for (let i = miniGame.obstacles.length - 1; i >= 0; i--) {
+      const ob = miniGame.obstacles[i];
+      ob.x -= miniGame.speed * dt;
+      if (ob.x < -20) {
+        miniGame.obstacles.splice(i, 1);
+      }
+    }
+  }
+
+  for (const h of hamsters.values()) {
+    h.animTick += dt;
+    if (miniGame.deadIds.has(h.id)) {
+      // Float up like a cute ghost!
+      h.y = Math.max(46, h.y - 26 * dt);
+      continue;
+    }
+    if (h.y < FLOOR_Y || h.vy < 0) {
+      h.vy += 480 * dt;
+      h.y = Math.min(FLOOR_Y, h.y + h.vy * dt);
+      if (h.y >= FLOOR_Y) h.vy = 0;
+    }
+  }
+
+  // Check collisions only for local player's hamster (authoritative per player!)
+  const myH = hamsters.get(coop.clientId);
+  if (myH && !miniGame.gameOver && !miniGame.deadIds.has(myH.id)) {
+    for (let i = miniGame.obstacles.length - 1; i >= 0; i--) {
+      const ob = miniGame.obstacles[i];
+      if (ob.kind === 'seed') {
+        if (Math.abs(myH.x - ob.x) < 16 && Math.abs(myH.y - 12 - ob.y) < 18) {
+          miniGame.obstacles.splice(i, 1);
+          miniGame.score += 10;
+          sfx.munch();
+          spawnParticles('heart', myH.x, myH.y - 26, 2);
+          coop.send('action', { action: 'mg_score', data: { score: miniGame.score } });
+        }
+      } else if (ob.kind === 'spike') {
+        if (Math.abs(myH.x - ob.x) < 12 && myH.y > FLOOR_Y - 14) {
+          applyAction('mg_die', { targetId: myH.id });
+          break;
+        }
+      }
+    }
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
 function updateSimulation(dt) {
+  if (miniGame.active) {
+    updateMiniGame(dt);
+    return;
+  }
+
   // Gradual stat decay
   state.hunger = clamp(state.hunger - dt * 0.45);
   state.hygiene = clamp(state.hygiene - dt * 0.25);
@@ -954,6 +1091,87 @@ function drawSceneEnvironment(tick) {
 
 function drawCage() {
   const tick = performance.now() / 1000;
+  if (miniGame.active) {
+    // Mini-Game Sky & Scrolling Track
+    ctx.fillStyle = '#232946';
+    ctx.fillRect(0, 0, W, FLOOR_Y);
+    ctx.fillStyle = '#b8c1ec';
+    for (let i = 0; i < 12; i++) {
+      const sx = ((i * 53 - tick * 18) % W + W) % W;
+      ctx.fillRect(Math.round(sx), 18 + (i % 4) * 18, 2, 2);
+    }
+    ctx.fillStyle = '#57cc99';
+    ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+    ctx.fillStyle = '#38b000';
+    for (let i = 0; i < 18; i++) {
+      const gx = ((i * 22 - tick * miniGame.speed) % W + W) % W;
+      ctx.fillRect(Math.round(gx), FLOOR_Y + 4, 8, 3);
+    }
+
+    // Obstacles & Seeds
+    for (const ob of miniGame.obstacles) {
+      if (ob.kind === 'seed') {
+        drawFoodSprite(ctx, 'seed', ob.x, ob.y, 2);
+      } else {
+        // Pixel Spiky Bomb / Cactus
+        const ox = Math.round(ob.x);
+        ctx.fillStyle = '#ff4d6d';
+        ctx.fillRect(ox - 6, FLOOR_Y - 14, 12, 14);
+        ctx.fillStyle = '#ffd166';
+        ctx.fillRect(ox - 2, FLOOR_Y - 18, 4, 4);
+        ctx.fillRect(ox - 8, FLOOR_Y - 10, 2, 4);
+        ctx.fillRect(ox + 6, FLOOR_Y - 10, 2, 4);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(ox - 3, FLOOR_Y - 10, 2, 2);
+        ctx.fillRect(ox + 1, FLOOR_Y - 10, 2, 2);
+      }
+    }
+
+    // Hamsters in Mini-Game
+    for (const h of hamsters.values()) {
+      const dead = miniGame.deadIds.has(h.id);
+      if (dead) ctx.globalAlpha = 0.5;
+      const frame = dead ? 'sleep' : Math.floor(h.animTick * 14) % 2 ? 'walk1' : 'walk2';
+      drawHamster(ctx, h.x, h.y, frame, h.fur, false, 2);
+      if (!dead) drawAccessory(ctx, h.x, h.y, h.acc, 2);
+      drawNameTag(h.x, h.y - 42, dead ? `👻 ${h.name}` : h.name, h.id === coop.clientId);
+      ctx.globalAlpha = 1;
+    }
+
+    // HUD
+    ctx.fillStyle = '#3b2416';
+    ctx.fillRect(8, 8, 126, 18);
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold 10px Silkscreen, monospace';
+    ctx.fillText(`SKOR: ${miniGame.score}`, 14, 21);
+
+    if (miniGame.gameOver) {
+      ctx.fillStyle = 'rgba(20, 14, 28, 0.78)';
+      ctx.fillRect(38, 54, 244, 72);
+      ctx.strokeStyle = '#ff7b9c';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(38, 54, 244, 72);
+      ctx.fillStyle = '#ff4d6d';
+      ctx.font = 'bold 12px Silkscreen, monospace';
+      ctx.fillText('GAME OVER! 💀', 102, 78);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '9px Silkscreen, monospace';
+      ctx.fillText(`Skor Tim: ${miniGame.score}`, 114, 96);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('Tap / Spasi untuk Main Lagi', 72, 114);
+    }
+
+    for (const p of particles) {
+      if (p.kind === 'heart') drawHeart(ctx, p.x, p.y, 1.5);
+      else if (p.kind === 'text') {
+        ctx.fillStyle = p.color || '#fff';
+        ctx.font = 'bold 9px Silkscreen, monospace';
+        ctx.fillText(p.text, Math.round(p.x), Math.round(p.y));
+      }
+    }
+    return;
+  }
+
   drawSceneEnvironment(tick);
 
   // Bouncy Toy Ball
@@ -1036,6 +1254,15 @@ let dragState = null; // { id, startX, startY, moved, lastSync }
 let lastCursorSent = 0;
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (miniGame.active) {
+    if (miniGame.gameOver) {
+      applyAction('mg_start');
+    } else {
+      applyAction('mg_jump', { targetId: coop.clientId });
+    }
+    return;
+  }
+
   const { x, y } = getCanvasCoords(e);
   for (const h of hamsters.values()) {
     if (!h.inTunnel && Math.hypot(x - h.x, y - (h.y - 16)) < 28) {
@@ -1137,8 +1364,24 @@ canvas.addEventListener('click', (e) => {
 });
 
 // Scene switcher
-document.querySelectorAll('.scene-btn').forEach((btn) => {
+document.querySelectorAll('.scene-btn[data-scene]').forEach((btn) => {
   btn.addEventListener('click', () => applyAction('scene', { scene: btn.dataset.scene }));
+});
+
+document.getElementById('btn-minigame').addEventListener('click', () => {
+  applyAction('mg_start');
+});
+
+window.addEventListener('keydown', (e) => {
+  if (!miniGame.active) return;
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+    e.preventDefault();
+    if (miniGame.gameOver) {
+      applyAction('mg_start');
+    } else {
+      applyAction('mg_jump', { targetId: coop.clientId });
+    }
+  }
 });
 
 // Inline Dress Code switcher (langsung di dalam game!)
