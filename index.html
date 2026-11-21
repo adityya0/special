@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hammy Co-op 🐹 Pixel Virtual Pet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-bar pixel-box">
+        <div class="brand">
+          <span class="brand-badge">PIXEL PET</span>
+          <h1 id="pet-title">MOCHI</h1>
+          <button id="btn-rename" class="icon-btn" title="Ganti Nama & Warna">✏️</button>
+        </div>
+
+        <div class="room-bar">
+          <div id="presence-pill" class="presence-pill offline">
+            <span class="dot"></span>
+            <span id="presence-text">Solo Mode</span>
+          </div>
+          <button id="btn-room" class="pixel-btn accent">👥 Join / Invite</button>
+          <button id="btn-sound" class="icon-btn" title="Suara 8-bit">🔊</button>
+        </div>
+      </header>
+
+      <main class="main-grid">
+        <section class="cage-section pixel-box">
+          <div class="stats-strip">
+            <div class="stat-item">
+              <span class="stat-label">🍖 LAPAR</span>
+              <div class="stat-bar"><div id="bar-hunger" class="stat-fill hunger"></div></div>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">💖 SENANG</span>
+              <div class="stat-bar"><div id="bar-happy" class="stat-fill happy"></div></div>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">⚡ ENERGI</span>
+              <div class="stat-bar"><div id="bar-energy" class="stat-fill energy"></div></div>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">✨ BERSIH</span>
+              <div class="stat-bar"><div id="bar-hygiene" class="stat-fill hygiene"></div></div>
+            </div>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="cage-canvas" width="320" height="200"></canvas>
+            <div id="bubble-toast" class="bubble-toast hidden"></div>
+          </div>
+
+          <div class="quick-emotes">
+            <span class="emote-hint">Kirim ke kandang:</span>
+            <button class="emote-btn" data-emote="❤️">❤️</button>
+            <button class="emote-btn" data-emote="✨ Gemes!">✨ Gemes</button>
+            <button class="emote-btn" data-emote="🌸 Hai!">🌸 Hai</button>
+            <button class="emote-btn" data-emote="🥰">🥰</button>
+            <button class="emote-btn" data-note="true">💌 Catatan</button>
+          </div>
+        </section>
+
+        <aside class="controls-section">
+          <div class="panel pixel-box">
+            <h2>🌻 Kasih Makan</h2>
+            <div class="btn-grid">
+              <button class="pixel-btn food-btn" data-food="seed">🌻 Biji</button>
+              <button class="pixel-btn food-btn" data-food="carrot">🥕 Wortel</button>
+              <button class="pixel-btn food-btn" data-food="strawberry">🍓 Stroberi</button>
+              <button class="pixel-btn food-btn" data-food="cheese">🧀 Keju</button>
+              <button class="pixel-btn" id="btn-water">💧 Minum</button>
+              <button class="pixel-btn" id="btn-pet">🤚 Elus</button>
+            </div>
+          </div>
+
+          <div class="panel pixel-box">
+            <h2>🎡 Mainan & Rawat</h2>
+            <div class="btn-grid">
+              <button class="pixel-btn" id="btn-wheel">🎡 Roda Lari</button>
+              <button class="pixel-btn" id="btn-tunnel">🚇 Terowongan</button>
+              <button class="pixel-btn" id="btn-sand">🛁 Mandi Pasir</button>
+              <button class="pixel-btn" id="btn-ball">🧶 Bola Mainan</button>
+              <button class="pixel-btn" id="btn-clean">🧹 Bersihkan</button>
+              <button class="pixel-btn" id="btn-sleep">🌙 Lampu</button>
+            </div>
+          </div>
+
+          <div class="panel pixel-box activity-panel">
+            <h2>📜 Log Kandang</h2>
+            <ul id="activity-log" class="activity-log"></ul>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <!-- Modal: Room / Supabase Co-op -->
+    <div id="modal-room" class="modal hidden">
+      <div class="modal-card pixel-box">
+        <div class="modal-header">
+          <h3>👥 Co-op 2 Orang</h3>
+          <button class="icon-btn close-modal" data-close="modal-room">✖</button>
+        </div>
+        <p class="modal-desc">
+          Main bareng di 1 kandang tanpa database! Cukup bagikan link room ini ke dia.
+        </p>
+
+        <label class="field-label">Nama Panggilanmu</label>
+        <input id="input-player-name" class="pixel-input" maxlength="14" placeholder="Misal: Kamu" />
+
+        <label class="field-label">Kode Room</label>
+        <div class="row-gap">
+          <input id="input-room-code" class="pixel-input" maxlength="20" placeholder="MOCHI-77" />
+          <button id="btn-join-room" class="pixel-btn accent">Masuk</button>
+        </div>
+
+        <div class="row-gap mt-8">
+          <button id="btn-copy-link" class="pixel-btn full">🔗 Salin Link Invite</button>
+        </div>
+
+        <details class="supabase-config">
+          <summary>⚙️ Pengaturan Supabase Realtime (Opsional)</summary>
+          <p class="small-note">
+            Isi jika belum di-set di Vercel Environment Variables. Disimpan hanya di browsermu.
+          </p>
+          <label class="field-label">Supabase URL</label>
+          <input id="input-sb-url" class="pixel-input" placeholder="https://xxxx.supabase.co" />
+          <label class="field-label">Supabase Anon Key</label>
+          <input id="input-sb-key" class="pixel-input" placeholder="eyJhbGciOi..." />
+          <button id="btn-save-sb" class="pixel-btn mt-8">💾 Simpan & Sambungkan</button>
+        </details>
+      </div>
+    </div>
+
+    <!-- Modal: Rename & Fur Color -->
+    <div id="modal-pet" class="modal hidden">
+      <div class="modal-card pixel-box">
+        <div class="modal-header">
+          <h3>🐹 Profil Hamster</h3>
+          <button class="icon-btn close-modal" data-close="modal-pet">✖</button>
+        </div>
+        <label class="field-label">Nama Hamster</label>
+        <input id="input-pet-name" class="pixel-input" maxlength="12" placeholder="MOCHI" />
+
+        <label class="field-label">Warna Bulu</label>
+        <div class="color-picker" id="fur-picker">
+          <button class="fur-chip" data-fur="golden" style="--c:#f5b062">Golden</button>
+          <button class="fur-chip" data-fur="snow" style="--c:#f7f4ef">Snow</button>
+          <button class="fur-chip" data-fur="choco" style="--c:#8d6e63">Choco</button>
+          <button class="fur-chip" data-fur="berry" style="--c:#f7a8b8">Berry</button>
+        </div>
+
+        <button id="btn-save-pet" class="pixel-btn accent full mt-12">Simpan</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
