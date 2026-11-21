@@ -248,10 +248,10 @@ export class HamsterArena {
     return { delayMin: 2.2, delayRange: 1.0, maxItems: 5, heartChance: 0.3 };
   }
 
-  spawnRandomItem(broadcast = false) {
+  spawnRandomItem(broadcast = false, forcedKind = null) {
     const { maxItems, heartChance } = this.getRaritySettings();
-    if (this.pickups.length >= maxItems) return;
-    const kind = Math.random() < heartChance ? 'heart' : 'weapon';
+    if (!forcedKind && this.pickups.length >= maxItems) return;
+    const kind = forcedKind || (Math.random() < heartChance ? 'heart' : 'weapon');
     let x = 40 + Math.random() * (this.W - 80);
     let y = 40 + Math.random() * (this.H - 80);
     for (const rk of this.rocks) {
@@ -466,9 +466,13 @@ export class HamsterArena {
       }
     }
 
-    // Host spawns random weapons & health (rarer as HP gets lower!)
+    // Host spawns random weapons & health: always keep at least 1 weapon on the arena!
     const ids = [...this.players.keys()].sort();
     if (ids[0] === this.coop.clientId && !this.winnerText) {
+      const hasWeapon = this.pickups.some((it) => it.kind === 'weapon');
+      if (!hasWeapon) {
+        this.spawnRandomItem(true, 'weapon');
+      }
       this.itemTimer -= dt;
       if (this.itemTimer <= 0) {
         const { delayMin, delayRange } = this.getRaritySettings();
