@@ -1,5 +1,5 @@
 import './style.css';
-import { drawHamster, drawFoodSprite, drawHeart } from './sprites.js';
+import { drawHamster, drawFoodSprite, drawHeart, drawAccessory } from './sprites.js';
 import { sfx } from './sound.js';
 import { CoopRealtime } from './realtime.js';
 
@@ -13,6 +13,7 @@ const FLOOR_Y = 172;
 const DEFAULT_STATE = {
   name: localStorage.getItem('hammy_player') || 'MOCHI',
   fur: localStorage.getItem('hammy_fur') || 'golden',
+  acc: localStorage.getItem('hammy_acc') || 'none',
   hunger: 82,
   happy: 88,
   energy: 90,
@@ -36,11 +37,12 @@ function saveState() {
   localStorage.setItem('hammy_state_v1', JSON.stringify(state));
 }
 
-function createHamster(id, name, fur, startX = 160) {
+function createHamster(id, name, fur, startX = 160, acc = 'none') {
   return {
     id,
     name: name || 'MOCHI',
     fur: fur || 'golden',
+    acc: acc || 'none',
     x: startX,
     y: FLOOR_Y,
     vx: 0,
@@ -150,7 +152,7 @@ const coop = new CoopRealtime({
       const existing = hamsters.get(p.clientId);
       if (!existing) {
         const spawnX = 80 + Math.random() * 160;
-        const nh = createHamster(p.clientId, p.name || 'Teman', p.fur || 'snow', spawnX);
+        const nh = createHamster(p.clientId, p.name || 'Teman', p.fur || 'snow', spawnX, p.acc || 'none');
         nh.vy = -50;
         hamsters.set(p.clientId, nh);
         sfx.heart();
@@ -160,6 +162,7 @@ const coop = new CoopRealtime({
       } else {
         existing.name = p.name || existing.name;
         existing.fur = p.fur || existing.fur;
+        existing.acc = p.acc || 'none';
       }
     }
 
@@ -219,7 +222,7 @@ const coop = new CoopRealtime({
 });
 
 // Spawn local visitor's hamster
-hamsters.set(coop.clientId, createHamster(coop.clientId, state.name, state.fur, 140));
+hamsters.set(coop.clientId, createHamster(coop.clientId, state.name, state.fur, 140, state.acc));
 
 function applyAction(action, data = {}, actor = state.name, broadcast = true, actorId = coop.clientId) {
   if (broadcast) {
@@ -861,7 +864,11 @@ function drawCage() {
       frame = Math.floor(h.animTick * 3) % 2 ? 'idle1' : 'idle2';
     }
     drawHamster(ctx, h.x, h.y, frame, h.fur, h.flip, 2);
-    drawNameTag(h.x, h.y - 38, h.name, h.id === coop.clientId);
+    if (h.mode !== 'sleep') {
+      drawAccessory(ctx, h.x, h.y, h.acc, 2);
+    }
+    const tagY = h.acc && h.acc !== 'none' && h.acc !== 'glasses' ? h.y - 43 : h.y - 38;
+    drawNameTag(h.x, tagY, h.name, h.id === coop.clientId);
   }
 
   // Particles
@@ -988,16 +995,20 @@ document.querySelectorAll('.close-modal').forEach((btn) => {
   });
 });
 
-// Rename & Fur Modal
+// Rename, Fur & Dress Code Modal
 document.getElementById('btn-rename').addEventListener('click', () => {
   document.getElementById('input-pet-name').value = state.name;
   document.querySelectorAll('#fur-picker .fur-chip').forEach((c) => {
     c.classList.toggle('selected', c.dataset.fur === state.fur);
   });
+  document.querySelectorAll('#acc-picker .fur-chip').forEach((c) => {
+    c.classList.toggle('selected', c.dataset.acc === state.acc);
+  });
   document.getElementById('modal-pet').classList.remove('hidden');
 });
 
 let selectedFur = state.fur;
+let selectedAcc = state.acc;
 document.querySelectorAll('#fur-picker .fur-chip').forEach((chip) => {
   chip.addEventListener('click', () => {
     selectedFur = chip.dataset.fur;
@@ -1005,29 +1016,39 @@ document.querySelectorAll('#fur-picker .fur-chip').forEach((chip) => {
     chip.classList.add('selected');
   });
 });
+document.querySelectorAll('#acc-picker .fur-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    selectedAcc = chip.dataset.acc;
+    document.querySelectorAll('#acc-picker .fur-chip').forEach((c) => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  });
+});
 
-async function saveMyProfile(newName, newFur) {
+async function saveMyProfile(newName, newFur, newAcc) {
   state.name = newName.trim().toUpperCase().slice(0, 12) || 'MOCHI';
   state.fur = newFur || state.fur;
+  state.acc = newAcc || state.acc;
   const myHammy = hamsters.get(coop.clientId);
   if (myHammy) {
     myHammy.name = state.name;
     myHammy.fur = state.fur;
+    myHammy.acc = state.acc;
   }
   saveState();
   updateUI();
-  await coop.updateProfile(state.name, state.fur);
+  await coop.updateProfile(state.name, state.fur, state.acc);
 }
 
 document.getElementById('btn-save-pet').addEventListener('click', async () => {
   const newName = document.getElementById('input-pet-name').value;
-  await saveMyProfile(newName, selectedFur);
+  await saveMyProfile(newName, selectedFur, selectedAcc);
   addLog(`Profil hamstermu diubah jadi ${state.name}`);
   document.getElementById('modal-pet').classList.add('hidden');
 });
 
 // Welcome Modal for new visitors
 let welcomeFur = state.fur;
+let welcomeAcc = state.acc;
 document.querySelectorAll('#welcome-fur-picker .fur-chip').forEach((chip) => {
   chip.addEventListener('click', () => {
     welcomeFur = chip.dataset.fur;
@@ -1037,10 +1058,19 @@ document.querySelectorAll('#welcome-fur-picker .fur-chip').forEach((chip) => {
     chip.classList.add('selected');
   });
 });
+document.querySelectorAll('#welcome-acc-picker .fur-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    welcomeAcc = chip.dataset.acc;
+    document
+      .querySelectorAll('#welcome-acc-picker .fur-chip')
+      .forEach((c) => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  });
+});
 
 document.getElementById('btn-welcome-go').addEventListener('click', async () => {
   const nameVal = document.getElementById('input-welcome-name').value || 'MOCHI';
-  await saveMyProfile(nameVal, welcomeFur);
+  await saveMyProfile(nameVal, welcomeFur, welcomeAcc);
   sfx.heart();
   document.getElementById('modal-welcome').classList.add('hidden');
   showToast(`Halo ${state.name}! Selamat bermain 🐹`);

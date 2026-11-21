@@ -293,3 +293,70 @@ export function drawHeart(ctx, x, y, scale = 2, color = '#ff5c8a') {
     }
   }
 }
+
+const ACCESSORY_SPRITES = {
+  ribbon: {
+    yOffset: -33,
+    mat: [
+      '.OO...OO.',
+      'OPPOOOPPO',
+      'OPPPWPPPO',
+      '.OOOPOOO.',
+    ],
+  },
+  crown: {
+    yOffset: -36,
+    mat: [
+      'O..OOO..O',
+      'OYOYYYO.O',
+      'OYYYYYYYO',
+      'OYYRYYRYO',
+      'OOOOOOOOO',
+    ],
+  },
+  leaf: {
+    yOffset: -36,
+    mat: [
+      '...GGG...',
+      '..GGGGGO.',
+      '...OGG...',
+      '....O....',
+    ],
+  },
+  glasses: {
+    yOffset: -24,
+    mat: [
+      'OOOOO..OOOOO',
+      'OKWKO..OKWKO',
+      'OKKKOOOOOKKK',
+      '.OOO....OOO.',
+    ],
+  },
+};
+
+const ACC_COLORS = {
+  O: '#2b1910',
+  P: '#ff5c8a',
+  W: '#ffd6e5',
+  Y: '#ffd166',
+  R: '#ff4d6d',
+  G: '#38b000',
+  K: '#1d1e2c',
+};
+
+export function drawAccessory(ctx, x, y, type, scale = 2) {
+  if (!type || type === 'none') return;
+  const spec = ACCESSORY_SPRITES[type];
+  if (!spec) return;
+  const mat = spec.mat;
+  const startX = Math.round(x - (mat[0].length * scale) / 2);
+  const startY = Math.round(y + spec.yOffset);
+  for (let r = 0; r < mat.length; r++) {
+    for (let c = 0; c < mat[r].length; c++) {
+      const ch = mat[r][c];
+      if (ch === '.') continue;
+      ctx.fillStyle = ACC_COLORS[ch] || '#000';
+      ctx.fillRect(startX + c * scale, startY + r * scale, scale, scale);
+    }
+  }
+}

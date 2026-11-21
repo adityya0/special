@@ -14,6 +14,7 @@ export class CoopRealtime {
     this.clientId = Math.random().toString(36).slice(2, 10);
     this.playerName = localStorage.getItem('hammy_player') || 'MOCHI';
     this.playerFur = localStorage.getItem('hammy_fur') || 'golden';
+    this.playerAcc = localStorage.getItem('hammy_acc') || 'none';
     this.roomCode = this.getInitialRoom();
     this.onlineCount = 1;
     this.peers = [];
@@ -120,11 +121,12 @@ export class CoopRealtime {
       clientId: this.clientId,
       name: this.playerName,
       fur: this.playerFur,
+      acc: this.playerAcc,
       joinedAt: Date.now(),
     });
   }
 
-  async updateProfile(name, fur) {
+  async updateProfile(name, fur, acc) {
     if (name) {
       this.playerName = name.trim().slice(0, 12) || 'MOCHI';
       localStorage.setItem('hammy_player', this.playerName);
@@ -132,6 +134,10 @@ export class CoopRealtime {
     if (fur) {
       this.playerFur = fur;
       localStorage.setItem('hammy_fur', this.playerFur);
+    }
+    if (acc) {
+      this.playerAcc = acc;
+      localStorage.setItem('hammy_acc', this.playerAcc);
     }
     await this.trackPresence();
   }
