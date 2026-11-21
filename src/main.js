@@ -58,6 +58,9 @@ function createHamster(id, name, fur, startX = 160, acc = 'none') {
 
 // Map<clientId, Hamster> - every visitor in the room gets their own hamster!
 const hamsters = new Map();
+// Track mutual effort per visitor (need >= REQUIRED_EFFORT from both sides to hug!)
+const REQUIRED_EFFORT = 3;
+const efforts = new Map(); // Map<clientId, number>
 
 const toys = {
   wheelAngle: 0,
@@ -119,6 +122,41 @@ function updateUI() {
   document.querySelectorAll('.scene-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.scene === state.scene);
   });
+  updateHugButton();
+}
+
+function getEffort(id) {
+  return Math.min(REQUIRED_EFFORT, efforts.get(id) || 0);
+}
+
+function addEffort(id) {
+  if (!id) return;
+  efforts.set(id, Math.min(REQUIRED_EFFORT, (efforts.get(id) || 0) + 1));
+}
+
+function getPartnerHammy() {
+  for (const [id, h] of hamsters.entries()) {
+    if (id !== coop.clientId) return h;
+  }
+  return null;
+}
+
+function updateHugButton() {
+  const btn = document.getElementById('btn-hug');
+  if (!btn) return;
+  const myEff = getEffort(coop.clientId);
+  const partner = getPartnerHammy();
+  if (!partner) {
+    btn.textContent = `🤗 Peluk (${myEff}/${REQUIRED_EFFORT} • Belum ada dia)`;
+    btn.classList.remove('ready');
+    return;
+  }
+  const partnerEff = getEffort(partner.id);
+  const ready = myEff >= REQUIRED_EFFORT && partnerEff >= REQUIRED_EFFORT;
+  btn.textContent = ready
+    ? '🤗 Peluk Bareng! ✨'
+    : `🤗 Peluk (${myEff}/${REQUIRED_EFFORT} • ${partnerEff}/${REQUIRED_EFFORT})`;
+  btn.classList.toggle('ready', ready);
 }
 
 function spawnParticles(kind, x, y, count = 4, extra = {}) {
@@ -200,13 +238,15 @@ const coop = new CoopRealtime({
   onRemoteCursor: ({ x, y, senderName }) => {
     remoteCursor = { x, y, name: senderName || 'Teman', expiresAt: performance.now() + 2500 };
   },
-  onRemoteEmote: ({ emote, senderName }) => {
+  onRemoteEmote: ({ emote, senderName, senderId }) => {
+    addEffort(senderId);
     sfx.heart();
     spawnParticles('text', 140, 88, 1, { text: `${senderName}: ${emote}`, color: '#ff4d79' });
     const myHammy = hamsters.get(coop.clientId);
     if (myHammy) spawnParticles('heart', myHammy.x, myHammy.y - 26, 4);
     showToast(`${senderName}: ${emote}`);
     addLog(`${senderName} kirim "${emote}"`);
+    updateUI();
   },
   onSyncState: ({ state: incoming }) => {
     if (!incoming) return;
@@ -227,6 +267,11 @@ hamsters.set(coop.clientId, createHamster(coop.clientId, state.name, state.fur, 
 function applyAction(action, data = {}, actor = state.name, broadcast = true, actorId = coop.clientId) {
   if (broadcast) {
     coop.send('action', { action, data });
+  }
+
+  // Count mutual effort for caring/playing actions (not passive goto/scene/hug)
+  if (['feed', 'water', 'pet', 'wheel', 'tunnel', 'sand', 'ball', 'clean'].includes(action)) {
+    addEffort(actorId);
   }
 
   const targetHammy =
@@ -355,6 +400,29 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
       }
       showToast(`Pindah ke ${labels[nextScene] || nextScene}!`);
       addLog(`${actor} ajak pindah ke ${labels[nextScene] || nextScene}`);
+      break;
+    }
+    case 'hug': {
+      const list = [...hamsters.values()];
+      if (list.length < 2) break;
+      const a = list[0];
+      const b = list[1];
+      const meetX = 160;
+      a.inTunnel = false;
+      b.inTunnel = false;
+      a.mode = 'hug';
+      b.mode = 'hug';
+      a.modeTimer = 3.2;
+      b.modeTimer = 3.2;
+      a.targetX = meetX - 10;
+      b.targetX = meetX + 10;
+      state.happy = clamp(state.happy + 25);
+      efforts.set(a.id, 0);
+      efforts.set(b.id, 0);
+      sfx.heart();
+      spawnParticles('heart', meetX, FLOOR_Y - 34, 9);
+      showToast(`🥰 ${a.name} & ${b.name} berpelukan!`);
+      addLog(`💞 ${a.name} & ${b.name} saling peluk (timbal balik tercapai!)`);
       break;
     }
   }
@@ -560,6 +628,19 @@ function updateSimulation(dt) {
       case 'sleep': {
         if (Math.random() < dt * 1.4) {
           spawnParticles('text', h.x + 10, h.y - 24, 1, { text: 'Z', color: '#a0c4ff' });
+        }
+        break;
+      }
+      case 'hug': {
+        const dx = h.targetX - h.x;
+        if (Math.abs(dx) > 2) {
+          h.flip = dx < 0;
+          h.x += Math.sign(dx) * 95 * dt;
+        } else {
+          h.flip = h.targetX > 160;
+          if (Math.random() < dt * 4) {
+            spawnParticles('heart', 160, FLOOR_Y - 30, 1);
+          }
         }
         break;
       }
@@ -855,7 +936,7 @@ function drawCage() {
     if (h.inTunnel) continue;
     let frame = 'idle1';
     if (h.mode === 'sleep') frame = 'sleep';
-    else if (h.mode === 'happy') frame = 'happy';
+    else if (h.mode === 'happy' || h.mode === 'hug') frame = 'happy';
     else if (h.mode === 'eat') frame = Math.floor(h.animTick * 8) % 2 ? 'eat1' : 'idle1';
     else if (h.mode === 'wheel' || h.mode === 'zoomies' || h.mode === 'wander') {
       const rate = h.mode === 'wander' ? 7 : 13;
@@ -979,13 +1060,34 @@ document.querySelectorAll('.emote-btn').forEach((btn) => {
       emote = msg.slice(0, 28);
     }
     sfx.heart();
+    addEffort(coop.clientId);
     const myHammy = hamsters.get(coop.clientId);
     spawnParticles('text', 140, 88, 1, { text: `${state.name}: ${emote}`, color: '#ff4d79' });
     if (myHammy) spawnParticles('heart', myHammy.x, myHammy.y - 26, 3);
     showToast(`${state.name}: ${emote}`);
     addLog(`${state.name} kirim "${emote}"`);
     coop.send('emote', { emote });
+    updateUI();
   });
+});
+
+document.getElementById('btn-hug').addEventListener('click', () => {
+  const partner = getPartnerHammy();
+  if (!partner) {
+    showToast('Ajak 1 orang lagi ke room untuk pelukan bareng! 👥');
+    return;
+  }
+  const myEff = getEffort(coop.clientId);
+  const partnerEff = getEffort(partner.id);
+  if (myEff < REQUIRED_EFFORT) {
+    showToast(`Kasih perhatian dulu yuk! (${myEff}/${REQUIRED_EFFORT}) 🌻`);
+    return;
+  }
+  if (partnerEff < REQUIRED_EFFORT) {
+    showToast(`Tunggu timbal balik dari ${partner.name} dulu ya~ (${partnerEff}/${REQUIRED_EFFORT}) 💕`);
+    return;
+  }
+  applyAction('hug');
 });
 
 // Modals

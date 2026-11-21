@@ -280,6 +280,24 @@ body {
   background: #ffd6e5;
 }
 
+.hug-btn {
+  margin-left: auto;
+  background: #f2e8dc;
+  font-size: 11px;
+  padding: 5px 9px;
+}
+
+.hug-btn.ready {
+  background: #ff7b9c;
+  color: #fff;
+  animation: pulseHug 1s infinite alternate;
+}
+
+@keyframes pulseHug {
+  from { transform: scale(1); }
+  to { transform: scale(1.04); }
+}
+
 .controls-section {
   display: flex;
   flex-direction: column;
