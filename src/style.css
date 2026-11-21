@@ -218,7 +218,12 @@ body {
   aspect-ratio: 16 / 10;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+}
+
+#cage-canvas:active {
+  cursor: grabbing;
 }
 
 .bubble-toast {

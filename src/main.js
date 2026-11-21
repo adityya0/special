@@ -391,6 +391,32 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
       }
       break;
     }
+    case 'drag': {
+      if (targetHammy) {
+        targetHammy.inTunnel = false;
+        targetHammy.mode = 'drag';
+        targetHammy.x = clamp(data.x ?? targetHammy.x, 18, W - 18);
+        targetHammy.y = clamp(data.y ?? targetHammy.y, 34, FLOOR_Y);
+        targetHammy.vy = 0;
+        targetHammy.modeTimer = 1.0;
+      }
+      break;
+    }
+    case 'drop': {
+      if (targetHammy) {
+        targetHammy.x = clamp(data.x ?? targetHammy.x, 18, W - 18);
+        targetHammy.y = clamp(data.y ?? targetHammy.y, 34, FLOOR_Y);
+        targetHammy.vy = 20;
+        targetHammy.mode = 'zoomies';
+        targetHammy.targetX = clamp(
+          targetHammy.x + (Math.random() > 0.5 ? 60 : -60),
+          26,
+          W - 26
+        );
+        targetHammy.modeTimer = 1.6;
+      }
+      break;
+    }
     case 'scene': {
       const nextScene = data.scene || 'cage';
       state.scene = nextScene;
@@ -535,12 +561,25 @@ function updateSimulation(dt) {
   // Update each hamster
   for (const h of hamsters.values()) {
     h.animTick += dt;
+
+    if (h.mode === 'drag') {
+      continue;
+    }
+
     h.modeTimer -= dt;
 
     if (h.y < FLOOR_Y || h.vy < 0) {
-      h.vy += 220 * dt;
+      h.vy += 320 * dt;
       h.y = Math.min(FLOOR_Y, h.y + h.vy * dt);
-      if (h.y >= FLOOR_Y) h.vy = 0;
+      if (h.y >= FLOOR_Y) {
+        // Cute tiny bounce when landing from a drop!
+        if (h.vy > 110) {
+          h.vy = -h.vy * 0.25;
+          spawnParticles('dust', h.x, FLOOR_Y - 2, 3, { color: '#e6ccb2' });
+        } else {
+          h.vy = 0;
+        }
+      }
     }
 
     if (foods.length > 0 && h.mode !== 'sleep') {
@@ -940,7 +979,9 @@ function drawCage() {
     let frame = 'idle1';
     if (h.mode === 'sleep') frame = 'sleep';
     else if (h.mode === 'happy' || h.mode === 'hug') frame = 'happy';
-    else if (h.mode === 'eat') frame = Math.floor(h.animTick * 8) % 2 ? 'eat1' : 'idle1';
+    else if (h.mode === 'drag') {
+      frame = Math.floor(h.animTick * 16) % 2 ? 'walk1' : 'walk2';
+    } else if (h.mode === 'eat') frame = Math.floor(h.animTick * 8) % 2 ? 'eat1' : 'idle1';
     else if (h.mode === 'wheel' || h.mode === 'zoomies' || h.mode === 'wander') {
       const rate = h.mode === 'wander' ? 7 : 13;
       frame = Math.floor(h.animTick * rate) % 2 ? 'walk1' : 'walk2';
@@ -982,7 +1023,7 @@ function drawCage() {
   }
 }
 
-// Canvas interactions
+// Canvas interactions (Pick & Drag + Click/Tap)
 function getCanvasCoords(e) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -991,12 +1032,85 @@ function getCanvasCoords(e) {
   };
 }
 
+let dragState = null; // { id, startX, startY, moved, lastSync }
+let lastCursorSent = 0;
+
+canvas.addEventListener('pointerdown', (e) => {
+  const { x, y } = getCanvasCoords(e);
+  for (const h of hamsters.values()) {
+    if (!h.inTunnel && Math.hypot(x - h.x, y - (h.y - 16)) < 28) {
+      canvas.setPointerCapture(e.pointerId);
+      dragState = {
+        id: h.id,
+        startX: x,
+        startY: y,
+        moved: false,
+        lastSync: 0,
+      };
+      return;
+    }
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  const { x, y } = getCanvasCoords(e);
+  const now = performance.now();
+
+  if (dragState) {
+    const h = hamsters.get(dragState.id);
+    if (!h) {
+      dragState = null;
+      return;
+    }
+    if (!dragState.moved && Math.hypot(x - dragState.startX, y - dragState.startY) > 4) {
+      dragState.moved = true;
+      sfx.squeak();
+    }
+    if (dragState.moved) {
+      h.inTunnel = false;
+      h.mode = 'drag';
+      h.x = clamp(x, 18, W - 18);
+      h.y = clamp(y + 14, 34, FLOOR_Y);
+      h.vy = 0;
+      if (now - dragState.lastSync > 75) {
+        dragState.lastSync = now;
+        coop.send('action', {
+          action: 'drag',
+          data: { targetId: h.id, x: h.x, y: h.y },
+        });
+      }
+    }
+    return;
+  }
+
+  if (now - lastCursorSent < 90) return;
+  lastCursorSent = now;
+  coop.send('cursor', { x, y });
+});
+
+function endDrag(e) {
+  if (!dragState) return;
+  const { x, y } = getCanvasCoords(e);
+  const h = hamsters.get(dragState.id);
+  const wasMoved = dragState.moved;
+  const targetId = dragState.id;
+  dragState = null;
+
+  if (wasMoved && h) {
+    applyAction('drop', { targetId, x: h.x, y: h.y });
+  } else {
+    applyAction('pet', { targetId });
+  }
+}
+
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
 canvas.addEventListener('click', (e) => {
   const { x, y } = getCanvasCoords(e);
   for (const h of hamsters.values()) {
-    if (!h.inTunnel && Math.hypot(x - h.x, y - (h.y - 14)) < 24) {
-      applyAction('pet', { targetId: h.id });
-      return;
+    if (!h.inTunnel && Math.hypot(x - h.x, y - (h.y - 16)) < 28) {
+      return; // Handled by pointerdown/pointerup (pet or drag)
     }
   }
   for (const m of messes) {
@@ -1005,28 +1119,21 @@ canvas.addEventListener('click', (e) => {
       return;
     }
   }
-  if (Math.hypot(x - 268, y - (FLOOR_Y - 24)) < 28) {
-    applyAction('wheel');
-    return;
-  }
-  if (x >= 126 && x <= 194 && y >= FLOOR_Y - 26) {
-    applyAction('tunnel');
-    return;
-  }
-  if (x >= 40 && x <= 84 && y >= FLOOR_Y - 18) {
-    applyAction('sand');
-    return;
+  if (state.scene === 'cage') {
+    if (Math.hypot(x - 268, y - (FLOOR_Y - 24)) < 28) {
+      applyAction('wheel');
+      return;
+    }
+    if (x >= 126 && x <= 194 && y >= FLOOR_Y - 26) {
+      applyAction('tunnel');
+      return;
+    }
+    if (x >= 40 && x <= 84 && y >= FLOOR_Y - 18) {
+      applyAction('sand');
+      return;
+    }
   }
   applyAction('goto', { x });
-});
-
-let lastCursorSent = 0;
-canvas.addEventListener('mousemove', (e) => {
-  const now = performance.now();
-  if (now - lastCursorSent < 90) return;
-  lastCursorSent = now;
-  const { x, y } = getCanvasCoords(e);
-  coop.send('cursor', { x, y });
 });
 
 // Scene switcher
