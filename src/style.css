@@ -640,3 +640,50 @@ button {
     padding: 4px 8px;
   }
 }
+
+.main-single {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-dock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.dock-tab {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 11px;
+  padding: 7px 8px;
+}
+
+.dock-tab.active {
+  background: #ffd166;
+  font-weight: 700;
+}
+
+.drawer {
+  margin-top: 8px;
+  padding: 10px;
+  background: #fdf2e9;
+  border: 2px dashed var(--shadow);
+}
+
+.btn-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 520px) {
+  .btn-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.drawer .activity-log {
+  max-height: 110px;
+}

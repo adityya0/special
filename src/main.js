@@ -1566,6 +1566,21 @@ canvas.addEventListener('click', (e) => {
   applyAction('goto', { x });
 });
 
+// Dock drawer toggle (default semua tersembunyi, muncul saat ditekan!)
+document.querySelectorAll('.dock-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const targetId = tab.dataset.drawer;
+    const targetEl = document.getElementById(targetId);
+    const wasOpen = !targetEl.classList.contains('hidden');
+    document.querySelectorAll('.drawer').forEach((d) => d.classList.add('hidden'));
+    document.querySelectorAll('.dock-tab').forEach((t) => t.classList.remove('active'));
+    if (!wasOpen) {
+      targetEl.classList.remove('hidden');
+      tab.classList.add('active');
+    }
+  });
+});
+
 // Scene switcher
 document.querySelectorAll('.scene-btn[data-scene]').forEach((btn) => {
   btn.addEventListener('click', () => applyAction('scene', { scene: btn.dataset.scene }));

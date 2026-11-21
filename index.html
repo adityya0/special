@@ -32,7 +32,7 @@
         </div>
       </header>
 
-      <main class="main-grid">
+      <main class="main-single">
         <section class="cage-section pixel-box">
           <div class="stats-strip">
             <div class="stat-item">
@@ -53,37 +53,22 @@
             </div>
           </div>
 
-          <div class="scene-bar">
-            <span class="emote-hint">Tempat:</span>
-            <button class="pixel-btn scene-btn active" data-scene="cage">🏠 Kandang</button>
-            <button class="pixel-btn scene-btn" data-scene="garden">🌿 Taman Rumput</button>
-            <button class="pixel-btn scene-btn" data-scene="explore">⛺ Explore Bukit</button>
-            <button id="btn-minigame" class="pixel-btn accent scene-btn">🎮 Mini-Game</button>
-            <button id="btn-arena" class="pixel-btn scene-btn">🔫 Arena (2-3P)</button>
-            <button id="btn-weather" class="pixel-btn scene-btn" title="Ganti Cuaca">☀️ Cuaca</button>
-            <button id="btn-photo" class="pixel-btn scene-btn" title="Simpan Foto Polaroid">📸 Foto</button>
-          </div>
-
           <div class="canvas-wrap">
             <canvas id="cage-canvas" width="320" height="200"></canvas>
             <div id="bubble-toast" class="bubble-toast hidden"></div>
           </div>
 
-          <div class="quick-emotes">
-            <span class="emote-hint">Kirim ke kandang:</span>
-            <button class="emote-btn" data-emote="❤️">❤️</button>
-            <button class="emote-btn" data-emote="✨ Gemes!">✨ Gemes</button>
-            <button class="emote-btn" data-emote="🌸 Hai!">🌸 Hai</button>
-            <button class="emote-btn" data-emote="🥰">🥰</button>
-            <button class="emote-btn" data-note="true">💌 Catatan</button>
-            <button id="btn-hug" class="pixel-btn hug-btn" title="Butuh timbal balik dari kedua pihak!">🤗 Peluk (0/3 • 0/3)</button>
+          <!-- Compact Dock: Menu tersembunyi secara default, muncul saat ditekan! -->
+          <div class="menu-dock">
+            <button class="pixel-btn dock-tab" data-drawer="drawer-food">🌻 Makan</button>
+            <button class="pixel-btn dock-tab" data-drawer="drawer-play">🎡 Main</button>
+            <button class="pixel-btn dock-tab" data-drawer="drawer-world">🌍 Tempat &amp; Game</button>
+            <button class="pixel-btn dock-tab" data-drawer="drawer-dress">👒 Dress Code</button>
+            <button class="pixel-btn dock-tab" data-drawer="drawer-social">💬 Chat &amp; Peluk</button>
           </div>
-        </section>
 
-        <aside class="controls-section">
-          <div class="panel pixel-box">
-            <h2>🌻 Kasih Makan</h2>
-            <div class="btn-grid">
+          <div id="drawer-food" class="drawer hidden">
+            <div class="btn-grid-3">
               <button class="pixel-btn food-btn" data-food="seed">🌻 Biji</button>
               <button class="pixel-btn food-btn" data-food="carrot">🥕 Wortel</button>
               <button class="pixel-btn food-btn" data-food="strawberry">🍓 Stroberi</button>
@@ -93,9 +78,8 @@
             </div>
           </div>
 
-          <div class="panel pixel-box">
-            <h2>🎡 Mainan & Rawat</h2>
-            <div class="btn-grid">
+          <div id="drawer-play" class="drawer hidden">
+            <div class="btn-grid-3">
               <button class="pixel-btn" id="btn-wheel">🎡 Roda Lari</button>
               <button class="pixel-btn" id="btn-tunnel">🚇 Terowongan</button>
               <button class="pixel-btn" id="btn-sand">🛁 Mandi Pasir</button>
@@ -105,8 +89,19 @@
             </div>
           </div>
 
-          <div class="panel pixel-box">
-            <h2>👒 Dress Code</h2>
+          <div id="drawer-world" class="drawer hidden">
+            <div class="scene-bar">
+              <button class="pixel-btn scene-btn active" data-scene="cage">🏠 Kandang</button>
+              <button class="pixel-btn scene-btn" data-scene="garden">🌿 Taman Rumput</button>
+              <button class="pixel-btn scene-btn" data-scene="explore">⛺ Explore Bukit</button>
+              <button id="btn-minigame" class="pixel-btn accent scene-btn">🎮 Mini-Game</button>
+              <button id="btn-arena" class="pixel-btn scene-btn">🔫 Arena (2-3P)</button>
+              <button id="btn-weather" class="pixel-btn scene-btn">☀️ Cuaca</button>
+              <button id="btn-photo" class="pixel-btn scene-btn">📸 Foto</button>
+            </div>
+          </div>
+
+          <div id="drawer-dress" class="drawer hidden">
             <div class="acc-inline-grid" id="inline-acc-picker">
               <button class="pixel-btn acc-btn" data-acc="none">Polos</button>
               <button class="pixel-btn acc-btn" data-acc="ribbon">🎀 Pita</button>
@@ -120,11 +115,18 @@
             </div>
           </div>
 
-          <div class="panel pixel-box activity-panel">
-            <h2>📜 Log Kandang</h2>
-            <ul id="activity-log" class="activity-log"></ul>
+          <div id="drawer-social" class="drawer hidden">
+            <div class="quick-emotes">
+              <button class="emote-btn" data-emote="❤️">❤️</button>
+              <button class="emote-btn" data-emote="✨ Gemes!">✨ Gemes</button>
+              <button class="emote-btn" data-emote="🌸 Hai!">🌸 Hai</button>
+              <button class="emote-btn" data-emote="🥰">🥰</button>
+              <button class="emote-btn" data-note="true">💌 Catatan</button>
+              <button id="btn-hug" class="pixel-btn hug-btn" title="Butuh timbal balik dari kedua pihak!">🤗 Peluk (0/3 • 0/3)</button>
+            </div>
+            <ul id="activity-log" class="activity-log mt-8"></ul>
           </div>
-        </aside>
+        </section>
       </main>
 
       <footer class="app-footer pixel-box">
