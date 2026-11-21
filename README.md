@@ -1,4 +1,4 @@
-# Hammy Co-op 🐹 (Pixel Virtual Pet)
+# Hamster Pixel 🐹
 
 Website virtual pet hamster bergaya **pixel art** yang ringan, hamsternya aktif jalan/lari terus (*ga bisa diem*), tersimpan di browser (`localStorage`), dan mendukung **2 orang join bareng** lewat **Supabase Realtime (Broadcast & Presence) tanpa tabel database**.
 
