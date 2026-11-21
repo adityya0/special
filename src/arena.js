@@ -218,9 +218,22 @@ export class HamsterArena {
     this.updateHUD();
   }
 
+  getRaritySettings() {
+    const alive = [...this.players.values()].filter((p) => p.hp > 0);
+    const minHp = alive.length > 0 ? Math.min(...alive.map((p) => p.hp)) : 3;
+    if (minHp <= 1) {
+      return { delayMin: 6.5, delayRange: 2.0, maxItems: 2, heartChance: 0.12 };
+    }
+    if (minHp === 2) {
+      return { delayMin: 4.0, delayRange: 1.5, maxItems: 3, heartChance: 0.2 };
+    }
+    return { delayMin: 2.2, delayRange: 1.0, maxItems: 5, heartChance: 0.3 };
+  }
+
   spawnRandomItem(broadcast = false) {
-    if (this.pickups.length >= 6) return;
-    const kind = Math.random() < 0.72 ? 'weapon' : 'heart';
+    const { maxItems, heartChance } = this.getRaritySettings();
+    if (this.pickups.length >= maxItems) return;
+    const kind = Math.random() < heartChance ? 'heart' : 'weapon';
     let x = 40 + Math.random() * (this.W - 80);
     let y = 40 + Math.random() * (this.H - 80);
     for (const rk of this.rocks) {
@@ -432,12 +445,13 @@ export class HamsterArena {
       }
     }
 
-    // Host spawns random weapons & health
+    // Host spawns random weapons & health (rarer as HP gets lower!)
     const ids = [...this.players.keys()].sort();
     if (ids[0] === this.coop.clientId && !this.winnerText) {
       this.itemTimer -= dt;
       if (this.itemTimer <= 0) {
-        this.itemTimer = 2.6 + Math.random() * 1.5;
+        const { delayMin, delayRange } = this.getRaritySettings();
+        this.itemTimer = delayMin + Math.random() * delayRange;
         this.spawnRandomItem(true);
       }
     }
