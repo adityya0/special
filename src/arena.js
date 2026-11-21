@@ -19,6 +19,7 @@ export class HamsterArena {
     this.btnStart = document.getElementById('btn-arena-start');
     this.btnExit = document.getElementById('btn-arena-exit');
     this.aimHint = document.getElementById('arena-aim-hint');
+    this.touchZone = document.getElementById('arena-touch-zone');
     this.joyBase = document.getElementById('arena-joy-base');
     this.joyKnob = document.getElementById('arena-joy-knob');
 
@@ -35,6 +36,7 @@ export class HamsterArena {
 
     this.keys = new Set();
     this.joyVec = { x: 0, y: 0 };
+    this.joyOrigin = null; // { x, y } floating center
     this.joyPointerId = null;
     this.lastMoveSync = 0;
     this.itemTimer = 2.0;
@@ -59,28 +61,45 @@ export class HamsterArena {
       this.startMatch(rocks, true);
     });
 
-    // Virtual Analog Joystick (lepas analog saat punya senjata = langsung tembak!)
-    this.joyBase.addEventListener('pointerdown', (e) => {
+    // Floating Virtual Analog Joystick (sentuh di mana saja di sisi kiri layar!)
+    this.touchZone.addEventListener('pointerdown', (e) => {
+      if (!this.started || this.winnerText) return;
       e.preventDefault();
       this.joyPointerId = e.pointerId;
-      this.joyBase.setPointerCapture(e.pointerId);
+      this.touchZone.setPointerCapture(e.pointerId);
+
+      const zoneRect = this.touchZone.getBoundingClientRect();
+      const baseW = this.joyBase.offsetWidth || 104;
+      const ox = e.clientX - zoneRect.left;
+      const oy = e.clientY - zoneRect.top;
+      this.joyOrigin = { x: e.clientX, y: e.clientY };
+
+      this.joyBase.style.left = `${ox - baseW / 2}px`;
+      this.joyBase.style.top = `${oy - baseW / 2}px`;
+      this.joyBase.style.bottom = 'auto';
+      this.joyBase.classList.add('active');
       this.updateJoystick(e);
     });
-    this.joyBase.addEventListener('pointermove', (e) => {
+    this.touchZone.addEventListener('pointermove', (e) => {
       if (this.joyPointerId === e.pointerId) this.updateJoystick(e);
     });
     const resetJoy = (e) => {
       if (this.joyPointerId !== e.pointerId) return;
       const hadAim = Math.hypot(this.joyVec.x, this.joyVec.y) > 0.25;
       this.joyPointerId = null;
+      this.joyOrigin = null;
       this.joyVec = { x: 0, y: 0 };
       this.joyKnob.style.transform = 'translate(0px, 0px)';
+      this.joyBase.classList.remove('active');
+      this.joyBase.style.left = '';
+      this.joyBase.style.top = '';
+      this.joyBase.style.bottom = '';
       if (hadAim) {
         this.tryShoot();
       }
     };
-    this.joyBase.addEventListener('pointerup', resetJoy);
-    this.joyBase.addEventListener('pointercancel', resetJoy);
+    this.touchZone.addEventListener('pointerup', resetJoy);
+    this.touchZone.addEventListener('pointercancel', resetJoy);
 
     // Keyboard fallback
     window.addEventListener('keydown', (e) => {
@@ -95,12 +114,10 @@ export class HamsterArena {
   }
 
   updateJoystick(e) {
-    const rect = this.joyBase.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const maxR = rect.width * 0.36;
-    let dx = e.clientX - cx;
-    let dy = e.clientY - cy;
+    if (!this.joyOrigin) return;
+    const maxR = (this.joyBase.offsetWidth || 104) * 0.38;
+    let dx = e.clientX - this.joyOrigin.x;
+    let dy = e.clientY - this.joyOrigin.y;
     const dist = Math.hypot(dx, dy);
     if (dist > maxR) {
       dx = (dx / dist) * maxR;

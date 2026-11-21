@@ -512,29 +512,47 @@ body {
   gap: 4px;
 }
 
+.arena-touch-zone {
+  position: absolute;
+  top: 48px;
+  bottom: 0;
+  left: 0;
+  width: 58%;
+  z-index: 52;
+  touch-action: none;
+}
+
 .arena-controls {
   position: absolute;
-  bottom: 18px;
-  left: 20px;
-  right: 20px;
+  bottom: 14px;
+  right: 16px;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
+  justify-content: flex-end;
   pointer-events: none;
   z-index: 53;
 }
 
 .joy-base {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
   width: 104px;
   height: 104px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.18);
-  border: 3px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.14);
+  border: 3px solid rgba(255, 255, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: auto;
-  touch-action: none;
+  pointer-events: none;
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+
+.joy-base.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 209, 102, 0.85);
 }
 
 .joy-knob {
