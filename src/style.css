@@ -244,6 +244,24 @@ body {
   margin-top: 10px;
 }
 
+.scene-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.scene-btn {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.scene-btn.active {
+  background: #ffd166;
+  font-weight: 700;
+}
+
 .emote-hint {
   font-size: 11px;
   color: var(--muted);

@@ -18,6 +18,7 @@ const DEFAULT_STATE = {
   energy: 90,
   hygiene: 85,
   night: false,
+  scene: 'cage', // cage | garden | explore
 };
 
 function loadState() {
@@ -113,6 +114,9 @@ function updateUI() {
   bars.hygiene.style.width = `${clamp(state.hygiene)}%`;
   document.getElementById('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
   document.getElementById('btn-sleep').textContent = state.night ? '☀️ Lampu' : '🌙 Lampu';
+  document.querySelectorAll('.scene-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.scene === state.scene);
+  });
 }
 
 function spawnParticles(kind, x, y, count = 4, extra = {}) {
@@ -182,6 +186,7 @@ const coop = new CoopRealtime({
           energy: state.energy,
           hygiene: state.hygiene,
           night: state.night,
+          scene: state.scene,
         },
       });
     }
@@ -207,6 +212,7 @@ const coop = new CoopRealtime({
     state.energy = incoming.energy ?? state.energy;
     state.hygiene = incoming.hygiene ?? state.hygiene;
     if (typeof incoming.night === 'boolean') state.night = incoming.night;
+    if (incoming.scene) state.scene = incoming.scene;
     saveState();
     updateUI();
   },
@@ -334,6 +340,20 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
       }
       break;
     }
+    case 'scene': {
+      const nextScene = data.scene || 'cage';
+      state.scene = nextScene;
+      const labels = { cage: '🏠 Kandang', garden: '🌿 Taman Rumput', explore: '⛺ Explore Bukit' };
+      for (const h of hamsters.values()) {
+        h.inTunnel = false;
+        h.mode = 'zoomies';
+        h.targetX = 50 + Math.random() * 220;
+        h.modeTimer = 1.5;
+      }
+      showToast(`Pindah ke ${labels[nextScene] || nextScene}!`);
+      addLog(`${actor} ajak pindah ke ${labels[nextScene] || nextScene}`);
+      break;
+    }
   }
 
   saveState();
@@ -355,6 +375,19 @@ function pickNextBehavior(h) {
   }
 
   const roll = Math.random();
+  if (state.scene !== 'cage') {
+    if (roll < 0.5) {
+      h.mode = 'wander';
+      h.targetX = 28 + Math.random() * (W - 56);
+      h.modeTimer = 1.4 + Math.random() * 1.4;
+    } else {
+      h.mode = 'zoomies';
+      h.targetX = 28 + Math.random() * (W - 56);
+      h.modeTimer = 1.2 + Math.random() * 1.0;
+    }
+    return;
+  }
+
   if (roll < 0.34) {
     h.mode = 'wander';
     h.targetX = 28 + Math.random() * (W - 56);
@@ -578,7 +611,139 @@ function drawNameTag(x, y, label, isLocal) {
   ctx.fillText(label, bx + padX, by + 8);
 }
 
-function drawCage() {
+function drawSceneEnvironment(tick) {
+  if (state.scene === 'garden') {
+    // Sky
+    ctx.fillStyle = state.night ? '#1d2440' : '#a8e0ff';
+    ctx.fillRect(0, 0, W, FLOOR_Y);
+
+    // Sun / Moon & Stars
+    if (state.night) {
+      ctx.fillStyle = '#fff3b0';
+      ctx.fillRect(264, 22, 12, 12);
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 14; i++) {
+        ctx.fillRect((i * 53 + 17) % W, (i * 29 + 10) % 90, 2, 2);
+      }
+    } else {
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(262, 20, 16, 16);
+      // Moving pixel clouds
+      const c1 = ((tick * 8) % (W + 60)) - 30;
+      const c2 = ((tick * 5 + 140) % (W + 60)) - 30;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(Math.round(c1), 28, 28, 8);
+      ctx.fillRect(Math.round(c1 + 6), 22, 16, 6);
+      ctx.fillRect(Math.round(c2), 46, 24, 7);
+      ctx.fillRect(Math.round(c2 + 5), 41, 14, 5);
+    }
+
+    // Distant hills
+    ctx.fillStyle = state.night ? '#264639' : '#80ed99';
+    ctx.fillRect(0, FLOOR_Y - 26, W, 26);
+
+    // Grass floor
+    ctx.fillStyle = state.night ? '#2d6a4f' : '#57cc99';
+    ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+    ctx.fillStyle = state.night ? '#40916c' : '#38b000';
+    for (let x = 6; x < W; x += 16) {
+      ctx.fillRect(x, FLOOR_Y - 3, 2, 3);
+      ctx.fillRect(x + 4, FLOOR_Y - 2, 2, 2);
+    }
+
+    // Pixel Tree (left)
+    ctx.fillStyle = '#6f4e37';
+    ctx.fillRect(28, FLOOR_Y - 46, 12, 46);
+    ctx.fillStyle = state.night ? '#1b4332' : '#38b000';
+    ctx.fillRect(14, FLOOR_Y - 74, 40, 32);
+    ctx.fillRect(22, FLOOR_Y - 84, 24, 12);
+
+    // Picnic Blanket (center)
+    ctx.fillStyle = '#ff7b9c';
+    ctx.fillRect(118, FLOOR_Y - 2, 84, 12);
+    ctx.fillStyle = '#fffaf3';
+    for (let px = 122; px < 198; px += 12) {
+      ctx.fillRect(px, FLOOR_Y, 6, 4);
+      ctx.fillRect(px + 6, FLOOR_Y + 4, 6, 4);
+    }
+
+    // Pixel Flowers & Butterflies
+    const flowerColors = ['#ff7b9c', '#ffd166', '#cdb4db'];
+    for (let i = 0; i < 5; i++) {
+      const fx = 72 + i * 48;
+      ctx.fillStyle = '#2d6a4f';
+      ctx.fillRect(fx, FLOOR_Y - 6, 2, 6);
+      ctx.fillStyle = flowerColors[i % flowerColors.length];
+      ctx.fillRect(fx - 2, FLOOR_Y - 10, 6, 5);
+    }
+    const bx = 95 + Math.sin(tick * 2.2) * 35;
+    const by = 112 + Math.cos(tick * 3.5) * 12;
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(Math.round(bx), Math.round(by), 4, 3);
+    ctx.fillRect(Math.round(bx + 3), Math.round(by - 2), 3, 3);
+    return;
+  }
+
+  if (state.scene === 'explore') {
+    // Twilight / Starry Hill Sky
+    ctx.fillStyle = state.night ? '#0f1024' : '#3d348b';
+    ctx.fillRect(0, 0, W, FLOOR_Y);
+
+    // Twinkling stars & crescent moon
+    ctx.fillStyle = '#fff3b0';
+    ctx.fillRect(42, 22, 12, 12);
+    ctx.fillStyle = state.night ? '#0f1024' : '#3d348b';
+    ctx.fillRect(46, 20, 10, 10);
+    for (let i = 0; i < 18; i++) {
+      const blink = Math.sin(tick * 3 + i) > -0.3;
+      if (blink) {
+        ctx.fillStyle = '#fffaf3';
+        ctx.fillRect((i * 47 + 19) % W, (i * 23 + 12) % 95, 2, 2);
+      }
+    }
+
+    // Pixel Mountains
+    ctx.fillStyle = '#5e548e';
+    ctx.beginPath();
+    ctx.moveTo(0, FLOOR_Y);
+    ctx.lineTo(70, 88);
+    ctx.lineTo(150, FLOOR_Y);
+    ctx.lineTo(220, 78);
+    ctx.lineTo(320, FLOOR_Y);
+    ctx.fill();
+
+    // Trail & Grass
+    ctx.fillStyle = '#386641';
+    ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+    ctx.fillStyle = '#bc8a5f';
+    ctx.fillRect(0, FLOOR_Y + 4, W, 12);
+
+    // Wooden Signpost (left)
+    ctx.fillStyle = '#6f4e37';
+    ctx.fillRect(36, FLOOR_Y - 30, 4, 30);
+    ctx.fillStyle = '#ddb892';
+    ctx.fillRect(24, FLOOR_Y - 28, 28, 10);
+
+    // Campfire (center-right)
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(210, FLOOR_Y - 4, 18, 4);
+    const flicker = Math.floor(tick * 10) % 2;
+    ctx.fillStyle = '#ff6b35';
+    ctx.fillRect(213, FLOOR_Y - 14 - flicker * 2, 12, 10);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(216, FLOOR_Y - 10, 6, 6);
+
+    // Fireflies
+    for (let i = 0; i < 6; i++) {
+      const fx = 60 + i * 44 + Math.sin(tick * 1.5 + i) * 14;
+      const fy = 120 + Math.cos(tick * 2 + i * 2) * 18;
+      ctx.fillStyle = '#e9ff70';
+      ctx.fillRect(Math.round(fx), Math.round(fy), 2, 2);
+    }
+    return;
+  }
+
+  // Default: Cage
   // Background wall
   ctx.fillStyle = state.night ? '#1f1a2e' : '#ffe8d6';
   ctx.fillRect(0, 0, W, FLOOR_Y);
@@ -602,7 +767,6 @@ function drawCage() {
   }
 
   // Fairy lights
-  const tick = performance.now() / 1000;
   for (let x = 20; x < W; x += 28) {
     ctx.fillStyle = '#4a3525';
     ctx.fillRect(x, 8, 28, 1);
@@ -660,6 +824,11 @@ function drawCage() {
   }
   ctx.fillStyle = '#6f4e37';
   ctx.fillRect(wx - 3, wy, 6, FLOOR_Y - wy);
+}
+
+function drawCage() {
+  const tick = performance.now() / 1000;
+  drawSceneEnvironment(tick);
 
   // Bouncy Toy Ball
   ctx.fillStyle = '#ffd166';
@@ -767,6 +936,11 @@ canvas.addEventListener('mousemove', (e) => {
   lastCursorSent = now;
   const { x, y } = getCanvasCoords(e);
   coop.send('cursor', { x, y });
+});
+
+// Scene switcher
+document.querySelectorAll('.scene-btn').forEach((btn) => {
+  btn.addEventListener('click', () => applyAction('scene', { scene: btn.dataset.scene }));
 });
 
 // Button bindings
