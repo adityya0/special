@@ -17,7 +17,7 @@ export class HamsterArena {
     this.btnReady = document.getElementById('btn-arena-ready');
     this.btnStart = document.getElementById('btn-arena-start');
     this.btnExit = document.getElementById('btn-arena-exit');
-    this.btnFire = document.getElementById('btn-arena-fire');
+    this.aimHint = document.getElementById('arena-aim-hint');
     this.joyBase = document.getElementById('arena-joy-base');
     this.joyKnob = document.getElementById('arena-joy-knob');
 
@@ -58,12 +58,7 @@ export class HamsterArena {
       this.startMatch(rocks, true);
     });
 
-    this.btnFire.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.tryShoot();
-    });
-
-    // Virtual Analog Joystick
+    // Virtual Analog Joystick (lepas analog saat punya senjata = langsung tembak!)
     this.joyBase.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.joyPointerId = e.pointerId;
@@ -75,9 +70,13 @@ export class HamsterArena {
     });
     const resetJoy = (e) => {
       if (this.joyPointerId !== e.pointerId) return;
+      const hadAim = Math.hypot(this.joyVec.x, this.joyVec.y) > 0.25;
       this.joyPointerId = null;
       this.joyVec = { x: 0, y: 0 };
       this.joyKnob.style.transform = 'translate(0px, 0px)';
+      if (hadAim) {
+        this.tryShoot();
+      }
     };
     this.joyBase.addEventListener('pointerup', resetJoy);
     this.joyBase.addEventListener('pointercancel', resetJoy);
@@ -110,12 +109,23 @@ export class HamsterArena {
     this.joyVec = { x: dx / maxR, y: dy / maxR };
   }
 
-  open(broadcast = true) {
+  async open(broadcast = true) {
     this.active = true;
     this.started = false;
     this.winnerText = '';
     this.overlay.classList.remove('hidden');
     this.lobbyEl.classList.remove('hidden');
+
+    try {
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch {
+      // Browser may disallow fullscreen/orientation lock without gesture or on iOS
+    }
 
     this.players.clear();
     let idx = 0;
@@ -150,6 +160,16 @@ export class HamsterArena {
     this.started = false;
     this.overlay.classList.add('hidden');
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    try {
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    } catch {
+      // Ignore
+    }
     this.onExit();
   }
 
@@ -324,9 +344,14 @@ export class HamsterArena {
     const me = this.players.get(this.coop.clientId);
     if (!me) return;
     const hearts = '❤️'.repeat(me.hp) + '🖤'.repeat(Math.max(0, 3 - me.hp));
-    const ammoText = me.ammo > 0 ? '🔫 SIAP TEMBAK (1)' : '🔫 Kosong (Cari Senjata!)';
+    const ammoText = me.ammo > 0 ? '🔫 SIAP TEMBAK (Lepas Analog!)' : '🔫 Kosong (Cari Senjata!)';
     this.hudEl.textContent = `${me.name}: ${hearts}  |  ${ammoText}`;
-    this.btnFire.disabled = me.ammo <= 0 || me.hp <= 0;
+    if (this.aimHint) {
+      this.aimHint.textContent =
+        me.ammo > 0
+          ? '🎯 Arahkan analog & LEPAS untuk tembak!'
+          : '🔍 Cari senjata (🔫) di arena dulu!';
+    }
   }
 
   loop(now) {
