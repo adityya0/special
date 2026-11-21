@@ -147,6 +147,7 @@ function updateUI() {
   document.getElementById('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
   document.getElementById('btn-bgm').textContent = sfx.bgmOn ? '🎶' : '🎵';
   document.getElementById('btn-sleep').textContent = state.night ? '☀️ Lampu' : '🌙 Lampu';
+  updateSceneButtons();
   const weatherLabels = { none: '☀️ Cerah', sakura: '🌸 Sakura', meteor: '🌠 Meteor', rain: '🌧️ Gerimis' };
   const wBtn = document.getElementById('btn-weather');
   if (wBtn) wBtn.textContent = weatherLabels[state.weather] || '☀️ Cuaca';
@@ -177,6 +178,42 @@ function getPartnerHammy() {
     if (id !== coop.clientId) return h;
   }
   return null;
+}
+
+const SCENE_CONTROLS = {
+  cage: {
+    wheel: '🎡 Roda Lari',
+    tunnel: '🚇 Terowongan',
+    sand: '🛁 Mandi Pasir',
+    clean: '🧹 Bersihkan',
+    sleepDay: '☀️ Lampu',
+    sleepNight: '🌙 Lampu',
+  },
+  garden: {
+    wheel: '🦋 Kejar Kupu',
+    tunnel: '🧺 Piknik',
+    sand: '🌸 Main Bunga',
+    clean: '🧹 Sapu Daun',
+    sleepDay: '☀️ Siang',
+    sleepNight: '🌙 Malam',
+  },
+  explore: {
+    wheel: '🔥 Api Unggun',
+    tunnel: '✨ Kejar Kunang',
+    sand: '🔭 Lihat Bintang',
+    clean: '🧹 Rapikan',
+    sleepDay: '☀️ Fajar',
+    sleepNight: '🌙 Malam',
+  },
+};
+
+function updateSceneButtons() {
+  const cfg = SCENE_CONTROLS[state.scene] || SCENE_CONTROLS.cage;
+  document.getElementById('btn-wheel').textContent = cfg.wheel;
+  document.getElementById('btn-tunnel').textContent = cfg.tunnel;
+  document.getElementById('btn-sand').textContent = cfg.sand;
+  document.getElementById('btn-clean').textContent = cfg.clean;
+  document.getElementById('btn-sleep').textContent = state.night ? cfg.sleepDay : cfg.sleepNight;
 }
 
 function updateHugButton() {
@@ -374,36 +411,100 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
     }
     case 'wheel': {
       sfx.squeak();
-      if (targetHammy) {
-        targetHammy.mode = 'wheel';
-        targetHammy.modeTimer = 4.2;
+      if (state.scene === 'garden') {
+        if (targetHammy) {
+          targetHammy.mode = 'zoomies';
+          targetHammy.targetX = 95 + Math.sin(performance.now() / 400) * 35;
+          targetHammy.vy = -60;
+          targetHammy.modeTimer = 2.4;
+        }
+        state.happy = clamp(state.happy + 12);
+        spawnParticles('sparkle', 100, 120, 5, { color: '#ffd166' });
+        addLog(`${actor} ajak kejar kupu-kupu 🦋`);
+      } else if (state.scene === 'explore') {
+        if (targetHammy) {
+          targetHammy.mode = 'wander';
+          targetHammy.targetX = 195;
+          targetHammy.modeTimer = 3.2;
+        }
+        state.happy = clamp(state.happy + 10);
+        state.energy = clamp(state.energy + 6);
+        spawnParticles('sparkle', 219, FLOOR_Y - 14, 6, { color: '#ff6b35' });
+        addLog(`${actor} hangatkan badan di api unggun 🔥`);
+      } else {
+        if (targetHammy) {
+          targetHammy.mode = 'wheel';
+          targetHammy.modeTimer = 4.2;
+        }
+        toys.wheelSpeed = 11;
+        state.happy = clamp(state.happy + 12);
+        state.energy = clamp(state.energy - 5);
+        addLog(`${actor} putar roda lari!`);
       }
-      toys.wheelSpeed = 11;
-      state.happy = clamp(state.happy + 12);
-      state.energy = clamp(state.energy - 5);
-      addLog(`${actor} putar roda lari!`);
       break;
     }
     case 'tunnel': {
       sfx.squeak();
-      if (targetHammy) {
-        targetHammy.mode = 'tunnel';
-        targetHammy.modeTimer = 2.6;
-        targetHammy.inTunnel = false;
+      if (state.scene === 'garden') {
+        if (targetHammy) {
+          targetHammy.mode = 'wander';
+          targetHammy.targetX = 160;
+          targetHammy.vy = -45;
+          targetHammy.modeTimer = 2.8;
+        }
+        state.happy = clamp(state.happy + 12);
+        spawnParticles('heart', 160, FLOOR_Y - 26, 4);
+        addLog(`${actor} piknik di karpet 🧺`);
+      } else if (state.scene === 'explore') {
+        if (targetHammy) {
+          targetHammy.mode = 'zoomies';
+          targetHammy.targetX = 60 + Math.random() * 180;
+          targetHammy.vy = -55;
+          targetHammy.modeTimer = 2.5;
+        }
+        state.happy = clamp(state.happy + 12);
+        spawnParticles('sparkle', 150, 125, 7, { color: '#e9ff70' });
+        addLog(`${actor} kejar kunang-kunang ✨`);
+      } else {
+        if (targetHammy) {
+          targetHammy.mode = 'tunnel';
+          targetHammy.modeTimer = 2.6;
+          targetHammy.inTunnel = false;
+        }
+        state.happy = clamp(state.happy + 10);
+        addLog(`${actor} ajak main terowongan`);
       }
-      state.happy = clamp(state.happy + 10);
-      addLog(`${actor} ajak main terowongan`);
       break;
     }
     case 'sand': {
       sfx.splash();
-      if (targetHammy) {
-        targetHammy.mode = 'sand';
-        targetHammy.modeTimer = 3.0;
+      if (state.scene === 'garden') {
+        if (targetHammy) {
+          targetHammy.mode = 'happy';
+          targetHammy.targetX = 120;
+          targetHammy.modeTimer = 2.2;
+        }
+        state.hygiene = clamp(state.hygiene + 16);
+        state.happy = clamp(state.happy + 12);
+        spawnParticles('sparkle', 120, FLOOR_Y - 12, 6, { color: '#ff7b9c' });
+        addLog(`${actor} main bunga di taman 🌸`);
+      } else if (state.scene === 'explore') {
+        if (targetHammy) {
+          targetHammy.mode = 'happy';
+          targetHammy.modeTimer = 2.6;
+        }
+        state.happy = clamp(state.happy + 14);
+        spawnParticles('sparkle', 160, 70, 8, { color: '#fff3b0' });
+        addLog(`${actor} lihat bintang bareng 🔭`);
+      } else {
+        if (targetHammy) {
+          targetHammy.mode = 'sand';
+          targetHammy.modeTimer = 3.0;
+        }
+        state.hygiene = clamp(state.hygiene + 24);
+        state.happy = clamp(state.happy + 8);
+        addLog(`${actor} mandikan pasir ✨`);
       }
-      state.hygiene = clamp(state.hygiene + 24);
-      state.happy = clamp(state.happy + 8);
-      addLog(`${actor} mandikan pasir ✨`);
       break;
     }
     case 'ball': {
