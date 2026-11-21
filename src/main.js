@@ -21,7 +21,20 @@ const DEFAULT_STATE = {
   hygiene: 85,
   night: false,
   scene: 'cage', // cage | garden | explore
+  weather: 'none', // none | sakura | meteor | rain
 };
+
+const records = (() => {
+  try {
+    return { bestJump: 0, arenaWins: 0, ...JSON.parse(localStorage.getItem('hammy_records_v1') || '{}') };
+  } catch {
+    return { bestJump: 0, arenaWins: 0 };
+  }
+})();
+
+function saveRecords() {
+  localStorage.setItem('hammy_records_v1', JSON.stringify(records));
+}
 
 function loadState() {
   try {
@@ -54,6 +67,8 @@ function createHamster(id, name, fur, startX = 160, acc = 'none') {
     modeTimer: 1.2 + Math.random(),
     animTick: Math.random() * 5,
     inTunnel: false,
+    speechText: '',
+    speechExpires: 0,
   };
 }
 
@@ -130,7 +145,13 @@ function updateUI() {
   bars.energy.style.width = `${clamp(state.energy)}%`;
   bars.hygiene.style.width = `${clamp(state.hygiene)}%`;
   document.getElementById('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
+  document.getElementById('btn-bgm').textContent = sfx.bgmOn ? '🎶' : '🎵';
   document.getElementById('btn-sleep').textContent = state.night ? '☀️ Lampu' : '🌙 Lampu';
+  const weatherLabels = { none: '☀️ Cerah', sakura: '🌸 Sakura', meteor: '🌠 Meteor', rain: '🌧️ Gerimis' };
+  const wBtn = document.getElementById('btn-weather');
+  if (wBtn) wBtn.textContent = weatherLabels[state.weather] || '☀️ Cuaca';
+  const rPill = document.getElementById('records-pill');
+  if (rPill) rPill.textContent = `🏆 ${records.bestJump} • ${records.arenaWins}W`;
   document.querySelectorAll('.scene-btn[data-scene]').forEach((b) => {
     b.classList.toggle('active', !miniGame.active && b.dataset.scene === state.scene);
   });
@@ -262,9 +283,12 @@ const coop = new CoopRealtime({
   onRemoteEmote: ({ emote, senderName, senderId }) => {
     addEffort(senderId);
     sfx.heart();
-    spawnParticles('text', 140, 88, 1, { text: `${senderName}: ${emote}`, color: '#ff4d79' });
-    const myHammy = hamsters.get(coop.clientId);
-    if (myHammy) spawnParticles('heart', myHammy.x, myHammy.y - 26, 4);
+    const senderHammy = hamsters.get(senderId);
+    if (senderHammy) {
+      senderHammy.speechText = emote;
+      senderHammy.speechExpires = performance.now() + 4500;
+      spawnParticles('heart', senderHammy.x, senderHammy.y - 26, 4);
+    }
     showToast(`${senderName}: ${emote}`);
     addLog(`${senderName} kirim "${emote}"`);
     updateUI();
@@ -289,6 +313,12 @@ const arena = new HamsterArena({
   coop,
   hamsters,
   onExit: () => updateUI(),
+  onWin: () => {
+    records.arenaWins += 1;
+    saveRecords();
+    updateUI();
+    addLog(`🏆 Menang Arena! Total: ${records.arenaWins}W`);
+  },
 });
 
 function applyAction(action, data = {}, actor = state.name, broadcast = true, actorId = coop.clientId) {
@@ -455,6 +485,13 @@ function applyAction(action, data = {}, actor = state.name, broadcast = true, ac
       }
       showToast(`Pindah ke ${labels[nextScene] || nextScene}!`);
       addLog(`${actor} ajak pindah ke ${labels[nextScene] || nextScene}`);
+      break;
+    }
+    case 'weather': {
+      state.weather = data.weather || 'none';
+      const wNames = { none: '☀️ Cerah', sakura: '🌸 Sakura', meteor: '🌠 Hujan Bintang', rain: '🌧️ Gerimis' };
+      showToast(`Cuaca: ${wNames[state.weather] || state.weather}`);
+      addLog(`${actor} ubah cuaca ke ${wNames[state.weather] || state.weather}`);
       break;
     }
     case 'mg_start': {
@@ -631,6 +668,10 @@ function updateMiniGame(dt) {
         if (Math.abs(myH.x - ob.x) < 16 && Math.abs(myH.y - 12 - ob.y) < 18) {
           miniGame.obstacles.splice(i, 1);
           miniGame.score += 10;
+          if (miniGame.score > records.bestJump) {
+            records.bestJump = miniGame.score;
+            saveRecords();
+          }
           sfx.munch();
           spawnParticles('heart', myH.x, myH.y - 26, 2);
           coop.send('action', { action: 'mg_score', data: { score: miniGame.score } });
@@ -883,6 +924,51 @@ function drawNameTag(x, y, label, isLocal) {
 
   ctx.fillStyle = '#ffffff';
   ctx.fillText(label, bx + padX, by + 8);
+}
+
+function drawSpeechBubble(x, y, text) {
+  ctx.font = 'bold 8px Silkscreen, monospace';
+  const tw = ctx.measureText(text).width;
+  const bw = Math.ceil(tw + 10);
+  const bx = Math.round(clamp(x - bw / 2, 4, W - bw - 4));
+  const by = Math.round(Math.max(18, y - 14));
+  ctx.fillStyle = '#fffaf3';
+  ctx.fillRect(bx, by, bw, 12);
+  ctx.strokeStyle = '#3b2416';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, bw, 12);
+  ctx.fillStyle = '#3b2416';
+  ctx.fillText(text, bx + 5, by + 9);
+}
+
+function drawWeather(tick) {
+  if (state.weather === 'sakura') {
+    for (let i = 0; i < 16; i++) {
+      const px = ((i * 37 + tick * 18 + Math.sin(tick + i) * 10) % W + W) % W;
+      const py = (i * 23 + tick * 24) % FLOOR_Y;
+      ctx.fillStyle = i % 2 ? '#ffb5c5' : '#ffd6e5';
+      ctx.fillRect(Math.round(px), Math.round(py), 3, 2);
+    }
+  } else if (state.weather === 'meteor') {
+    for (let i = 0; i < 4; i++) {
+      const cycle = (tick * 0.7 + i * 0.45) % 2.2;
+      if (cycle < 0.7) {
+        const sx = 40 + i * 70 + cycle * 90;
+        const sy = 14 + cycle * 65;
+        ctx.fillStyle = '#fff3b0';
+        ctx.fillRect(Math.round(sx), Math.round(sy), 4, 2);
+        ctx.fillStyle = 'rgba(255, 243, 176, 0.45)';
+        ctx.fillRect(Math.round(sx - 5), Math.round(sy - 3), 5, 2);
+      }
+    }
+  } else if (state.weather === 'rain') {
+    ctx.fillStyle = '#a2d2ff';
+    for (let i = 0; i < 24; i++) {
+      const rx = ((i * 29 - tick * 25) % W + W) % W;
+      const ry = (i * 19 + tick * 110) % FLOOR_Y;
+      ctx.fillRect(Math.round(rx), Math.round(ry), 1, 5);
+    }
+  }
 }
 
 function drawSceneEnvironment(tick) {
@@ -1223,7 +1309,12 @@ function drawCage() {
     }
     const tagY = h.acc && h.acc !== 'none' && h.acc !== 'glasses' ? h.y - 46 : h.y - 38;
     drawNameTag(h.x, tagY, h.name, h.id === coop.clientId);
+    if (h.speechText && performance.now() < h.speechExpires) {
+      drawSpeechBubble(h.x, tagY - 12, h.speechText);
+    }
   }
+
+  drawWeather(tick);
 
   // Particles
   for (const p of particles) {
@@ -1427,6 +1518,47 @@ document.getElementById('btn-sound').addEventListener('click', () => {
   updateUI();
 });
 
+document.getElementById('btn-bgm').addEventListener('click', () => {
+  const on = sfx.toggleBgm();
+  showToast(on ? '🎵 Musik Lofi 8-bit aktif!' : '🎵 Musik dimatikan');
+  updateUI();
+});
+
+document.getElementById('btn-weather').addEventListener('click', () => {
+  const order = ['none', 'sakura', 'meteor', 'rain'];
+  const next = order[(order.indexOf(state.weather) + 1) % order.length];
+  applyAction('weather', { weather: next });
+});
+
+document.getElementById('btn-photo').addEventListener('click', () => {
+  const snap = document.createElement('canvas');
+  snap.width = 360;
+  snap.height = 260;
+  const sctx = snap.getContext('2d');
+  sctx.imageSmoothingEnabled = false;
+  sctx.fillStyle = '#fffaf3';
+  sctx.fillRect(0, 0, snap.width, snap.height);
+  sctx.strokeStyle = '#3b2416';
+  sctx.lineWidth = 4;
+  sctx.strokeRect(2, 2, snap.width - 4, snap.height - 4);
+  sctx.drawImage(canvas, 20, 16, 320, 200);
+  sctx.fillStyle = '#3b2416';
+  sctx.font = 'bold 11px Silkscreen, monospace';
+  const names = [...hamsters.values()].map((h) => h.name).join(' & ');
+  const dateStr = new Date().toLocaleDateString('id-ID');
+  sctx.fillText(`Hamster Pixel: ${names}`, 20, 236);
+  sctx.font = '9px Silkscreen, monospace';
+  sctx.fillStyle = '#8a6f5a';
+  sctx.fillText(dateStr, 20, 250);
+
+  const link = document.createElement('a');
+  link.download = `hamster-pixel-${Date.now()}.png`;
+  link.href = snap.toDataURL('image/png');
+  link.click();
+  sfx.heart();
+  showToast('📸 Foto Polaroid tersimpan!');
+});
+
 // Emotes & Notes
 document.querySelectorAll('.emote-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -1439,8 +1571,11 @@ document.querySelectorAll('.emote-btn').forEach((btn) => {
     sfx.heart();
     addEffort(coop.clientId);
     const myHammy = hamsters.get(coop.clientId);
-    spawnParticles('text', 140, 88, 1, { text: `${state.name}: ${emote}`, color: '#ff4d79' });
-    if (myHammy) spawnParticles('heart', myHammy.x, myHammy.y - 26, 3);
+    if (myHammy) {
+      myHammy.speechText = emote;
+      myHammy.speechExpires = performance.now() + 4500;
+      spawnParticles('heart', myHammy.x, myHammy.y - 26, 3);
+    }
     showToast(`${state.name}: ${emote}`);
     addLog(`${state.name} kirim "${emote}"`);
     coop.send('emote', { emote });

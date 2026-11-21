@@ -3,6 +3,9 @@ class SoundFX {
   constructor() {
     this.ctx = null;
     this.muted = localStorage.getItem('hammy_muted') === '1';
+    this.bgmOn = false;
+    this.bgmTimer = null;
+    this.bgmStep = 0;
   }
 
   ensureCtx() {
@@ -69,6 +72,26 @@ class SoundFX {
   sleep() {
     this.tone(392, 0.1, 'sine', 0.04, 0);
     this.tone(330, 0.14, 'sine', 0.04, 0.1);
+  }
+
+  toggleBgm() {
+    this.bgmOn = !this.bgmOn;
+    if (this.bgmOn) {
+      const melody = [523, 659, 784, 659, 587, 659, 523, 392, 440, 523, 659, 587];
+      this.bgmTimer = setInterval(() => {
+        if (this.muted || !this.bgmOn) return;
+        const freq = melody[this.bgmStep % melody.length];
+        this.tone(freq, 0.28, 'sine', 0.018, 0);
+        if (this.bgmStep % 4 === 0) {
+          this.tone(freq / 2, 0.45, 'triangle', 0.015, 0);
+        }
+        this.bgmStep++;
+      }, 420);
+    } else if (this.bgmTimer) {
+      clearInterval(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+    return this.bgmOn;
   }
 }
 

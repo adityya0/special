@@ -3,10 +3,11 @@ import { sfx } from './sound.js';
 
 // Top-Down Full-Screen Hamster Arena (2-3 players, 3 HP, Rocks, 1-shot Weapon & Health pickups, Analog Stick)
 export class HamsterArena {
-  constructor({ coop, hamsters, onExit }) {
+  constructor({ coop, hamsters, onExit, onWin }) {
     this.coop = coop;
     this.hamsters = hamsters;
     this.onExit = onExit;
+    this.onWin = onWin;
 
     this.overlay = document.getElementById('arena-overlay');
     this.canvas = document.getElementById('arena-canvas');
@@ -332,6 +333,9 @@ export class HamsterArena {
     const alive = [...this.players.values()].filter((p) => p.hp > 0);
     if (this.players.size >= 2 && alive.length <= 1) {
       this.winnerText = alive.length === 1 ? `🏆 ${alive[0].name} MENANG!` : '💀 SERI!';
+      if (alive.length === 1 && alive[0].id === this.coop.clientId && this.onWin) {
+        this.onWin();
+      }
       setTimeout(() => {
         if (this.active) {
           this.started = false;
