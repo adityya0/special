@@ -9,10 +9,10 @@ const W = 320;
 const H = 200;
 const FLOOR_Y = 172;
 
-// Persistent browser-only state (no database!)
+// Persistent browser-only cage state (no database!)
 const DEFAULT_STATE = {
-  name: 'MOCHI',
-  fur: 'golden',
+  name: localStorage.getItem('hammy_player') || 'MOCHI',
+  fur: localStorage.getItem('hammy_fur') || 'golden',
   hunger: 82,
   happy: 88,
   energy: 90,
@@ -35,20 +35,26 @@ function saveState() {
   localStorage.setItem('hammy_state_v1', JSON.stringify(state));
 }
 
-// Hyperactive ("ga bisa diem") hamster entity
-const hammy = {
-  x: 160,
-  y: FLOOR_Y,
-  vx: 0,
-  vy: 0,
-  targetX: 160,
-  flip: false,
-  mode: 'wander', // wander | zoomies | wheel | tunnel | sand | eat | happy | sleep
-  modeTimer: 1.5,
-  animTick: 0,
-  inTunnel: false,
-  tunnelDir: 1,
-};
+function createHamster(id, name, fur, startX = 160) {
+  return {
+    id,
+    name: name || 'MOCHI',
+    fur: fur || 'golden',
+    x: startX,
+    y: FLOOR_Y,
+    vx: 0,
+    vy: 0,
+    targetX: startX,
+    flip: false,
+    mode: 'wander', // wander | zoomies | wheel | tunnel | sand | eat | happy | sleep
+    modeTimer: 1.2 + Math.random(),
+    animTick: Math.random() * 5,
+    inTunnel: false,
+  };
+}
+
+// Map<clientId, Hamster> - every visitor in the room gets their own hamster!
+const hamsters = new Map();
 
 const toys = {
   wheelAngle: 0,
@@ -63,6 +69,7 @@ const foods = []; // { type, x, y, vy }
 const messes = []; // { x, y }
 const particles = []; // { kind, x, y, vx, vy, life, text, color }
 let remoteCursor = null; // { x, y, name, expiresAt }
+let lastMeetHeart = 0;
 
 // UI Elements
 const elTitle = document.getElementById('pet-title');
@@ -98,7 +105,8 @@ function clamp(v, min = 0, max = 100) {
 }
 
 function updateUI() {
-  elTitle.textContent = state.name;
+  const myHammy = hamsters.get(coop.clientId);
+  elTitle.textContent = myHammy ? myHammy.name : state.name;
   bars.hunger.style.width = `${clamp(state.hunger)}%`;
   bars.happy.style.width = `${clamp(state.happy)}%`;
   bars.energy.style.width = `${clamp(state.energy)}%`;
@@ -129,42 +137,93 @@ const coop = new CoopRealtime({
       elPresenceText.textContent = reason === 'no-keys' ? 'Solo (Browser)' : 'Offline';
       return;
     }
+
+    // Sync hamsters for all peers currently in the room
+    const activeIds = new Set([coop.clientId]);
+    for (const p of peers) {
+      if (!p.clientId) continue;
+      activeIds.add(p.clientId);
+      const existing = hamsters.get(p.clientId);
+      if (!existing) {
+        const spawnX = 80 + Math.random() * 160;
+        const nh = createHamster(p.clientId, p.name || 'Teman', p.fur || 'snow', spawnX);
+        nh.vy = -50;
+        hamsters.set(p.clientId, nh);
+        sfx.heart();
+        spawnParticles('heart', spawnX, FLOOR_Y - 24, 5);
+        showToast(`✨ ${nh.name} bergabung ke kandang!`);
+        addLog(`${nh.name} masuk kandang 🐹`);
+      } else {
+        existing.name = p.name || existing.name;
+        existing.fur = p.fur || existing.fur;
+      }
+    }
+
+    // Remove hamsters of visitors who left
+    for (const [id, h] of hamsters.entries()) {
+      if (!activeIds.has(id)) {
+        hamsters.delete(id);
+        addLog(`${h.name} keluar dari kandang`);
+      }
+    }
+
     elPresencePill.className = 'presence-pill online';
     const peerNames = peers.map((p) => p.name).filter(Boolean);
     elPresenceText.textContent =
       onlineCount > 1
-        ? `2+ Online (${peerNames.join(', ') || 'Teman'}) 💕`
-        : `Room ${coop.roomCode} (1/2)`;
+        ? `${onlineCount} Hamster Online (${peerNames.join(', ')}) 💕`
+        : `Room ${coop.roomCode} (1 Online)`;
 
     if (onlineCount > 1) {
-      coop.send('sync_state', { state });
+      coop.send('sync_state', {
+        state: {
+          hunger: state.hunger,
+          happy: state.happy,
+          energy: state.energy,
+          hygiene: state.hygiene,
+          night: state.night,
+        },
+      });
     }
   },
   onRemoteAction: (payload) => {
-    applyAction(payload.action, payload.data, payload.senderName, false);
+    applyAction(payload.action, payload.data, payload.senderName, false, payload.senderId);
   },
   onRemoteCursor: ({ x, y, senderName }) => {
     remoteCursor = { x, y, name: senderName || 'Teman', expiresAt: performance.now() + 2500 };
   },
   onRemoteEmote: ({ emote, senderName }) => {
     sfx.heart();
-    spawnParticles('text', 160, 88, 1, { text: `${senderName}: ${emote}`, color: '#ff4d79' });
-    spawnParticles('heart', hammy.x, hammy.y - 26, 4);
+    spawnParticles('text', 140, 88, 1, { text: `${senderName}: ${emote}`, color: '#ff4d79' });
+    const myHammy = hamsters.get(coop.clientId);
+    if (myHammy) spawnParticles('heart', myHammy.x, myHammy.y - 26, 4);
     showToast(`${senderName}: ${emote}`);
     addLog(`${senderName} kirim "${emote}"`);
   },
   onSyncState: ({ state: incoming }) => {
     if (!incoming) return;
-    Object.assign(state, incoming);
+    state.hunger = incoming.hunger ?? state.hunger;
+    state.happy = incoming.happy ?? state.happy;
+    state.energy = incoming.energy ?? state.energy;
+    state.hygiene = incoming.hygiene ?? state.hygiene;
+    if (typeof incoming.night === 'boolean') state.night = incoming.night;
     saveState();
     updateUI();
   },
 });
 
-function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
+// Spawn local visitor's hamster
+hamsters.set(coop.clientId, createHamster(coop.clientId, state.name, state.fur, 140));
+
+function applyAction(action, data = {}, actor = state.name, broadcast = true, actorId = coop.clientId) {
   if (broadcast) {
     coop.send('action', { action, data });
   }
+
+  const targetHammy =
+    (data.targetId && hamsters.get(data.targetId)) ||
+    hamsters.get(actorId) ||
+    hamsters.get(coop.clientId);
 
   switch (action) {
     case 'feed': {
@@ -181,8 +240,10 @@ function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
       sfx.splash();
       state.hunger = clamp(state.hunger + 6);
       state.energy = clamp(state.energy + 6);
-      hammy.mode = 'wander';
-      hammy.targetX = 32;
+      if (targetHammy) {
+        targetHammy.mode = 'wander';
+        targetHammy.targetX = 32;
+      }
       spawnParticles('sparkle', 30, 128, 5, { color: '#54a0ff' });
       addLog(`${actor} kasih minum`);
       break;
@@ -191,17 +252,21 @@ function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
       sfx.squeak();
       sfx.heart();
       state.happy = clamp(state.happy + 14);
-      hammy.mode = 'happy';
-      hammy.modeTimer = 1.4;
-      hammy.vy = -55;
-      spawnParticles('heart', hammy.x, hammy.y - 26, 5);
-      addLog(`${actor} elus ${state.name} ❤️`);
+      if (targetHammy) {
+        targetHammy.mode = 'happy';
+        targetHammy.modeTimer = 1.4;
+        targetHammy.vy = -55;
+        spawnParticles('heart', targetHammy.x, targetHammy.y - 26, 5);
+        addLog(`${actor} elus ${targetHammy.name} ❤️`);
+      }
       break;
     }
     case 'wheel': {
       sfx.squeak();
-      hammy.mode = 'wheel';
-      hammy.modeTimer = 4.2;
+      if (targetHammy) {
+        targetHammy.mode = 'wheel';
+        targetHammy.modeTimer = 4.2;
+      }
       toys.wheelSpeed = 11;
       state.happy = clamp(state.happy + 12);
       state.energy = clamp(state.energy - 5);
@@ -210,17 +275,21 @@ function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
     }
     case 'tunnel': {
       sfx.squeak();
-      hammy.mode = 'tunnel';
-      hammy.modeTimer = 2.6;
-      hammy.inTunnel = false;
+      if (targetHammy) {
+        targetHammy.mode = 'tunnel';
+        targetHammy.modeTimer = 2.6;
+        targetHammy.inTunnel = false;
+      }
       state.happy = clamp(state.happy + 10);
       addLog(`${actor} ajak main terowongan`);
       break;
     }
     case 'sand': {
       sfx.splash();
-      hammy.mode = 'sand';
-      hammy.modeTimer = 3.0;
+      if (targetHammy) {
+        targetHammy.mode = 'sand';
+        targetHammy.modeTimer = 3.0;
+      }
       state.hygiene = clamp(state.hygiene + 24);
       state.happy = clamp(state.happy + 8);
       addLog(`${actor} mandikan pasir ✨`);
@@ -230,9 +299,11 @@ function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
       sfx.squeak();
       toys.ballVx = (Math.random() > 0.5 ? 1 : -1) * 110;
       toys.ballVy = -95;
-      hammy.mode = 'zoomies';
-      hammy.modeTimer = 2.5;
-      hammy.targetX = toys.ballX;
+      if (targetHammy) {
+        targetHammy.mode = 'zoomies';
+        targetHammy.modeTimer = 2.5;
+        targetHammy.targetX = toys.ballX;
+      }
       state.happy = clamp(state.happy + 10);
       addLog(`${actor} lempar bola mainan`);
       break;
@@ -248,21 +319,19 @@ function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
     case 'sleep': {
       sfx.sleep();
       state.night = typeof data.night === 'boolean' ? data.night : !state.night;
-      hammy.mode = state.night ? 'sleep' : 'zoomies';
-      hammy.modeTimer = state.night ? 6 : 2;
+      for (const h of hamsters.values()) {
+        h.mode = state.night ? 'sleep' : 'zoomies';
+        h.modeTimer = state.night ? 6 : 2;
+      }
       addLog(`${actor} ${state.night ? 'matikan lampu 🌙' : 'nyalakan lampu ☀️'}`);
       break;
     }
     case 'goto': {
-      hammy.mode = 'zoomies';
-      hammy.targetX = clamp(data.x ?? 160, 26, W - 26);
-      hammy.modeTimer = 1.6;
-      break;
-    }
-    case 'profile': {
-      if (data.name) state.name = data.name;
-      if (data.fur) state.fur = data.fur;
-      addLog(`${actor} ubah profil ${state.name}`);
+      if (targetHammy) {
+        targetHammy.mode = 'zoomies';
+        targetHammy.targetX = clamp(data.x ?? 160, 26, W - 26);
+        targetHammy.modeTimer = 1.6;
+      }
       break;
     }
   }
@@ -271,50 +340,49 @@ function applyAction(action, data = {}, actor = 'Kamu', broadcast = true) {
   updateUI();
 }
 
-// Autonomous "ga bisa diem" AI
-function pickNextBehavior() {
+// Autonomous "ga bisa diem" AI per hamster
+function pickNextBehavior(h) {
   if (state.night || state.energy < 14) {
-    hammy.mode = 'sleep';
-    hammy.modeTimer = 4 + Math.random() * 4;
+    h.mode = 'sleep';
+    h.modeTimer = 4 + Math.random() * 4;
     return;
   }
 
   if (foods.length > 0) {
-    hammy.mode = 'eat';
-    hammy.modeTimer = 2.5;
+    h.mode = 'eat';
+    h.modeTimer = 2.5;
     return;
   }
 
   const roll = Math.random();
   if (roll < 0.34) {
-    hammy.mode = 'wander';
-    hammy.targetX = 28 + Math.random() * (W - 56);
-    hammy.modeTimer = 1.4 + Math.random() * 1.4;
+    h.mode = 'wander';
+    h.targetX = 28 + Math.random() * (W - 56);
+    h.modeTimer = 1.4 + Math.random() * 1.4;
   } else if (roll < 0.58) {
-    hammy.mode = 'zoomies';
-    hammy.targetX = 28 + Math.random() * (W - 56);
-    hammy.modeTimer = 1.2 + Math.random() * 1.0;
+    h.mode = 'zoomies';
+    h.targetX = 28 + Math.random() * (W - 56);
+    h.modeTimer = 1.2 + Math.random() * 1.0;
   } else if (roll < 0.74) {
-    hammy.mode = 'wheel';
-    hammy.modeTimer = 3.2 + Math.random() * 2.0;
+    h.mode = 'wheel';
+    h.modeTimer = 3.2 + Math.random() * 2.0;
     toys.wheelSpeed = 8;
   } else if (roll < 0.88) {
-    hammy.mode = 'tunnel';
-    hammy.modeTimer = 2.4;
-    hammy.inTunnel = false;
+    h.mode = 'tunnel';
+    h.modeTimer = 2.4;
+    h.inTunnel = false;
   } else {
-    hammy.mode = 'sand';
-    hammy.modeTimer = 2.4;
+    h.mode = 'sand';
+    h.modeTimer = 2.4;
   }
 }
 
 function updateSimulation(dt) {
-  hammy.animTick += dt;
-
   // Gradual stat decay
   state.hunger = clamp(state.hunger - dt * 0.45);
   state.hygiene = clamp(state.hygiene - dt * 0.25);
-  if (hammy.mode === 'sleep') {
+  const allSleeping = [...hamsters.values()].every((h) => h.mode === 'sleep');
+  if (allSleeping) {
     state.energy = clamp(state.energy + dt * 2.6);
   } else {
     state.energy = clamp(state.energy - dt * 0.3);
@@ -340,11 +408,7 @@ function updateSimulation(dt) {
     toys.ballVy += 260 * dt;
   } else {
     toys.ballY = FLOOR_Y - 6;
-    if (Math.abs(toys.ballVy) > 25) {
-      toys.ballVy = -toys.ballVy * 0.55;
-    } else {
-      toys.ballVy = 0;
-    }
+    toys.ballVy = Math.abs(toys.ballVy) > 25 ? -toys.ballVy * 0.55 : 0;
   }
   if (toys.ballX < 20 || toys.ballX > W - 20) {
     toys.ballVx *= -0.8;
@@ -353,118 +417,137 @@ function updateSimulation(dt) {
   toys.ballVx *= 0.985;
 
   // Wheel friction
-  if (hammy.mode === 'wheel') {
+  const someoneOnWheel = [...hamsters.values()].some((h) => h.mode === 'wheel');
+  if (someoneOnWheel) {
     toys.wheelSpeed = Math.max(toys.wheelSpeed, 9);
   } else {
     toys.wheelSpeed *= 0.96;
   }
   toys.wheelAngle += toys.wheelSpeed * dt;
 
-  // Hamster movement & behavior
-  hammy.modeTimer -= dt;
-  if (hammy.y < FLOOR_Y || hammy.vy < 0) {
-    hammy.vy += 220 * dt;
-    hammy.y = Math.min(FLOOR_Y, hammy.y + hammy.vy * dt);
-    if (hammy.y >= FLOOR_Y) hammy.vy = 0;
-  }
+  // Update each hamster
+  for (const h of hamsters.values()) {
+    h.animTick += dt;
+    h.modeTimer -= dt;
 
-  if (foods.length > 0 && hammy.mode !== 'sleep') {
-    hammy.mode = 'eat';
-  }
-
-  switch (hammy.mode) {
-    case 'wander':
-    case 'zoomies': {
-      const speed = hammy.mode === 'zoomies' ? 92 : 42;
-      const dx = hammy.targetX - hammy.x;
-      if (Math.abs(dx) > 3) {
-        hammy.flip = dx < 0;
-        hammy.x += Math.sign(dx) * speed * dt;
-        if (hammy.mode === 'zoomies' && Math.random() < dt * 8) {
-          spawnParticles('dust', hammy.x, FLOOR_Y - 2, 1, { color: '#e6ccb2' });
-        }
-      } else if (hammy.modeTimer <= 0) {
-        pickNextBehavior();
-      }
-      break;
+    if (h.y < FLOOR_Y || h.vy < 0) {
+      h.vy += 220 * dt;
+      h.y = Math.min(FLOOR_Y, h.y + h.vy * dt);
+      if (h.y >= FLOOR_Y) h.vy = 0;
     }
-    case 'eat': {
-      if (foods.length === 0) {
-        pickNextBehavior();
+
+    if (foods.length > 0 && h.mode !== 'sleep') {
+      h.mode = 'eat';
+    }
+
+    switch (h.mode) {
+      case 'wander':
+      case 'zoomies': {
+        const speed = h.mode === 'zoomies' ? 92 : 42;
+        const dx = h.targetX - h.x;
+        if (Math.abs(dx) > 3) {
+          h.flip = dx < 0;
+          h.x += Math.sign(dx) * speed * dt;
+          if (h.mode === 'zoomies' && Math.random() < dt * 8) {
+            spawnParticles('dust', h.x, FLOOR_Y - 2, 1, { color: '#e6ccb2' });
+          }
+        } else if (h.modeTimer <= 0) {
+          pickNextBehavior(h);
+        }
         break;
       }
-      const target = foods[0];
-      const dx = target.x - hammy.x;
-      if (Math.abs(dx) > 6) {
-        hammy.flip = dx < 0;
-        hammy.x += Math.sign(dx) * 85 * dt;
-      } else if (target.y >= FLOOR_Y - 6) {
-        foods.shift();
-        sfx.munch();
-        spawnParticles('heart', hammy.x, hammy.y - 24, 2);
-        hammy.mode = 'happy';
-        hammy.modeTimer = 0.8;
-      }
-      break;
-    }
-    case 'wheel': {
-      const wx = 268;
-      const dx = wx - hammy.x;
-      if (Math.abs(dx) > 3) {
-        hammy.flip = dx < 0;
-        hammy.x += Math.sign(dx) * 75 * dt;
-      } else {
-        hammy.flip = false;
-        hammy.y = FLOOR_Y - 12;
-      }
-      break;
-    }
-    case 'tunnel': {
-      const entryX = 128;
-      const exitX = 192;
-      if (!hammy.inTunnel) {
-        const dx = entryX - hammy.x;
-        if (Math.abs(dx) > 3) {
-          hammy.flip = dx < 0;
-          hammy.x += Math.sign(dx) * 80 * dt;
-        } else {
-          hammy.inTunnel = true;
-          hammy.modeTimer = 1.0;
+      case 'eat': {
+        if (foods.length === 0) {
+          pickNextBehavior(h);
+          break;
         }
-      } else if (hammy.modeTimer <= 0.35) {
-        hammy.x = exitX;
-        hammy.flip = false;
-        hammy.inTunnel = false;
-        hammy.vy = -40;
-        hammy.mode = 'wander';
-        hammy.targetX = exitX + 24;
-        hammy.modeTimer = 1.0;
+        const target = foods[0];
+        const dx = target.x - h.x;
+        if (Math.abs(dx) > 6) {
+          h.flip = dx < 0;
+          h.x += Math.sign(dx) * 85 * dt;
+        } else if (target.y >= FLOOR_Y - 6) {
+          foods.shift();
+          sfx.munch();
+          spawnParticles('heart', h.x, h.y - 24, 2);
+          h.mode = 'happy';
+          h.modeTimer = 0.8;
+        }
+        break;
       }
-      break;
-    }
-    case 'sand': {
-      const sx = 62;
-      const dx = sx - hammy.x;
-      if (Math.abs(dx) > 3) {
-        hammy.flip = dx < 0;
-        hammy.x += Math.sign(dx) * 70 * dt;
-      } else {
-        if (Math.random() < dt * 7) {
+      case 'wheel': {
+        const wx = 268;
+        const dx = wx - h.x;
+        if (Math.abs(dx) > 3) {
+          h.flip = dx < 0;
+          h.x += Math.sign(dx) * 75 * dt;
+        } else {
+          h.flip = false;
+          h.y = FLOOR_Y - 12;
+        }
+        break;
+      }
+      case 'tunnel': {
+        const entryX = 128;
+        const exitX = 192;
+        if (!h.inTunnel) {
+          const dx = entryX - h.x;
+          if (Math.abs(dx) > 3) {
+            h.flip = dx < 0;
+            h.x += Math.sign(dx) * 80 * dt;
+          } else {
+            h.inTunnel = true;
+            h.modeTimer = 1.0;
+          }
+        } else if (h.modeTimer <= 0.35) {
+          h.x = exitX;
+          h.flip = false;
+          h.inTunnel = false;
+          h.vy = -40;
+          h.mode = 'wander';
+          h.targetX = exitX + 24;
+          h.modeTimer = 1.0;
+        }
+        break;
+      }
+      case 'sand': {
+        const sx = 62;
+        const dx = sx - h.x;
+        if (Math.abs(dx) > 3) {
+          h.flip = dx < 0;
+          h.x += Math.sign(dx) * 70 * dt;
+        } else if (Math.random() < dt * 7) {
           spawnParticles('sparkle', sx, FLOOR_Y - 10, 1, { color: '#fff3b0' });
         }
+        break;
       }
-      break;
+      case 'sleep': {
+        if (Math.random() < dt * 1.4) {
+          spawnParticles('text', h.x + 10, h.y - 24, 1, { text: 'Z', color: '#a0c4ff' });
+        }
+        break;
+      }
     }
-    case 'sleep': {
-      if (Math.random() < dt * 1.4) {
-        spawnParticles('text', hammy.x + 10, hammy.y - 24, 1, { text: 'Z', color: '#a0c4ff' });
-      }
-      break;
+
+    if (h.modeTimer <= 0 && h.mode !== 'eat') {
+      pickNextBehavior(h);
     }
   }
 
-  if (hammy.modeTimer <= 0 && hammy.mode !== 'eat') {
-    pickNextBehavior();
+  // Cute interaction when 2 hamsters meet in the cage!
+  const list = [...hamsters.values()];
+  if (list.length >= 2 && performance.now() - lastMeetHeart > 4500) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        if (!a.inTunnel && !b.inTunnel && Math.abs(a.x - b.x) < 22 && Math.abs(a.y - b.y) < 12) {
+          lastMeetHeart = performance.now();
+          spawnParticles('heart', (a.x + b.x) / 2, Math.min(a.y, b.y) - 28, 3);
+          break;
+        }
+      }
+    }
   }
 
   // Particles
@@ -475,6 +558,24 @@ function updateSimulation(dt) {
     p.life -= dt;
     if (p.life <= 0) particles.splice(i, 1);
   }
+}
+
+function drawNameTag(x, y, label, isLocal) {
+  ctx.font = 'bold 8px Silkscreen, monospace';
+  const textW = ctx.measureText(label).width;
+  const padX = 4;
+  const boxW = Math.ceil(textW + padX * 2);
+  const bx = Math.round(x - boxW / 2);
+  const by = Math.round(y - 10);
+
+  ctx.fillStyle = isLocal ? '#ff7b9c' : '#3b2416';
+  ctx.fillRect(bx, by, boxW, 10);
+  ctx.strokeStyle = '#3b2416';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, boxW, 10);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(label, bx + padX, by + 8);
 }
 
 function drawCage() {
@@ -497,14 +598,15 @@ function drawCage() {
 
   if (state.night) {
     ctx.fillStyle = '#fff3b0';
-    ctx.fillRect(172, 34, 8, 8); // pixel moon
+    ctx.fillRect(172, 34, 8, 8);
   }
 
   // Fairy lights
+  const tick = performance.now() / 1000;
   for (let x = 20; x < W; x += 28) {
     ctx.fillStyle = '#4a3525';
     ctx.fillRect(x, 8, 28, 1);
-    const glow = Math.sin(hammy.animTick * 3 + x) > 0;
+    const glow = Math.sin(tick * 3 + x) > 0;
     ctx.fillStyle = state.night ? (glow ? '#ffd166' : '#ff7b9c') : '#ffd166';
     ctx.fillRect(x + 12, 9, 4, 4);
   }
@@ -517,7 +619,7 @@ function drawCage() {
     ctx.fillRect(x, FLOOR_Y + 4 + ((x * 7) % 14), 6, 2);
   }
 
-  // Water bottle (left wall)
+  // Water bottle
   ctx.fillStyle = '#a2d2ff';
   ctx.fillRect(14, 92, 12, 26);
   ctx.fillStyle = '#3b2416';
@@ -525,13 +627,13 @@ function drawCage() {
   ctx.fillStyle = '#adb5bd';
   ctx.fillRect(18, 118, 4, 10);
 
-  // Sand bath (left-ish)
+  // Sand bath
   ctx.fillStyle = '#ffcad4';
   ctx.fillRect(42, FLOOR_Y - 10, 40, 10);
   ctx.fillStyle = '#f4e1c1';
   ctx.fillRect(45, FLOOR_Y - 8, 34, 4);
 
-  // Pixel Tunnel (center)
+  // Pixel Tunnel
   ctx.fillStyle = '#8ecae6';
   ctx.fillRect(134, FLOOR_Y - 20, 52, 20);
   ctx.fillStyle = '#219ebc';
@@ -540,7 +642,7 @@ function drawCage() {
   ctx.fillRect(130, FLOOR_Y - 16, 6, 16);
   ctx.fillRect(184, FLOOR_Y - 16, 6, 16);
 
-  // Hamster Wheel (right)
+  // Hamster Wheel
   const wx = 268;
   const wy = FLOOR_Y - 24;
   ctx.strokeStyle = '#ff7b9c';
@@ -548,7 +650,6 @@ function drawCage() {
   ctx.beginPath();
   ctx.arc(wx, wy, 22, 0, Math.PI * 2);
   ctx.stroke();
-  // Spokes
   ctx.lineWidth = 2;
   for (let i = 0; i < 4; i++) {
     const a = toys.wheelAngle + (i * Math.PI) / 2;
@@ -557,7 +658,6 @@ function drawCage() {
     ctx.lineTo(wx + Math.cos(a) * 21, wy + Math.sin(a) * 21);
     ctx.stroke();
   }
-  // Stand
   ctx.fillStyle = '#6f4e37';
   ctx.fillRect(wx - 3, wy, 6, FLOOR_Y - wy);
 
@@ -578,19 +678,21 @@ function drawCage() {
     drawFoodSprite(ctx, f.type, f.x, f.y, 2);
   }
 
-  // Hamster
-  if (!hammy.inTunnel) {
+  // Draw all hamsters in the cage + their name tags
+  for (const h of hamsters.values()) {
+    if (h.inTunnel) continue;
     let frame = 'idle1';
-    if (hammy.mode === 'sleep') frame = 'sleep';
-    else if (hammy.mode === 'happy') frame = 'happy';
-    else if (hammy.mode === 'eat') frame = Math.floor(hammy.animTick * 8) % 2 ? 'eat1' : 'idle1';
-    else if (hammy.mode === 'wheel' || hammy.mode === 'zoomies' || hammy.mode === 'wander') {
-      const rate = hammy.mode === 'wander' ? 7 : 13;
-      frame = Math.floor(hammy.animTick * rate) % 2 ? 'walk1' : 'walk2';
+    if (h.mode === 'sleep') frame = 'sleep';
+    else if (h.mode === 'happy') frame = 'happy';
+    else if (h.mode === 'eat') frame = Math.floor(h.animTick * 8) % 2 ? 'eat1' : 'idle1';
+    else if (h.mode === 'wheel' || h.mode === 'zoomies' || h.mode === 'wander') {
+      const rate = h.mode === 'wander' ? 7 : 13;
+      frame = Math.floor(h.animTick * rate) % 2 ? 'walk1' : 'walk2';
     } else {
-      frame = Math.floor(hammy.animTick * 3) % 2 ? 'idle1' : 'idle2';
+      frame = Math.floor(h.animTick * 3) % 2 ? 'idle1' : 'idle2';
     }
-    drawHamster(ctx, hammy.x, hammy.y, frame, state.fur, hammy.flip, 2);
+    drawHamster(ctx, h.x, h.y, frame, h.fur, h.flip, 2);
+    drawNameTag(h.x, h.y - 29, h.name, h.id === coop.clientId);
   }
 
   // Particles
@@ -631,9 +733,11 @@ function getCanvasCoords(e) {
 
 canvas.addEventListener('click', (e) => {
   const { x, y } = getCanvasCoords(e);
-  if (Math.hypot(x - hammy.x, y - (hammy.y - 14)) < 24) {
-    applyAction('pet');
-    return;
+  for (const h of hamsters.values()) {
+    if (!h.inTunnel && Math.hypot(x - h.x, y - (h.y - 14)) < 24) {
+      applyAction('pet', { targetId: h.id });
+      return;
+    }
   }
   for (const m of messes) {
     if (Math.hypot(x - m.x, y - m.y) < 16) {
@@ -694,10 +798,11 @@ document.querySelectorAll('.emote-btn').forEach((btn) => {
       emote = msg.slice(0, 28);
     }
     sfx.heart();
-    spawnParticles('text', 160, 88, 1, { text: `Kamu: ${emote}`, color: '#ff4d79' });
-    spawnParticles('heart', hammy.x, hammy.y - 26, 3);
-    showToast(`Kamu: ${emote}`);
-    addLog(`Kamu kirim "${emote}"`);
+    const myHammy = hamsters.get(coop.clientId);
+    spawnParticles('text', 140, 88, 1, { text: `${state.name}: ${emote}`, color: '#ff4d79' });
+    if (myHammy) spawnParticles('heart', myHammy.x, myHammy.y - 26, 3);
+    showToast(`${state.name}: ${emote}`);
+    addLog(`${state.name} kirim "${emote}"`);
     coop.send('emote', { emote });
   });
 });
@@ -709,32 +814,71 @@ document.querySelectorAll('.close-modal').forEach((btn) => {
   });
 });
 
+// Rename & Fur Modal
 document.getElementById('btn-rename').addEventListener('click', () => {
   document.getElementById('input-pet-name').value = state.name;
-  document.querySelectorAll('.fur-chip').forEach((c) => {
+  document.querySelectorAll('#fur-picker .fur-chip').forEach((c) => {
     c.classList.toggle('selected', c.dataset.fur === state.fur);
   });
   document.getElementById('modal-pet').classList.remove('hidden');
 });
 
 let selectedFur = state.fur;
-document.querySelectorAll('.fur-chip').forEach((chip) => {
+document.querySelectorAll('#fur-picker .fur-chip').forEach((chip) => {
   chip.addEventListener('click', () => {
     selectedFur = chip.dataset.fur;
-    document.querySelectorAll('.fur-chip').forEach((c) => c.classList.remove('selected'));
+    document.querySelectorAll('#fur-picker .fur-chip').forEach((c) => c.classList.remove('selected'));
     chip.classList.add('selected');
   });
 });
 
-document.getElementById('btn-save-pet').addEventListener('click', () => {
-  const newName = document.getElementById('input-pet-name').value.trim().toUpperCase() || 'MOCHI';
-  applyAction('profile', { name: newName, fur: selectedFur });
+async function saveMyProfile(newName, newFur) {
+  state.name = newName.trim().toUpperCase().slice(0, 12) || 'MOCHI';
+  state.fur = newFur || state.fur;
+  const myHammy = hamsters.get(coop.clientId);
+  if (myHammy) {
+    myHammy.name = state.name;
+    myHammy.fur = state.fur;
+  }
+  saveState();
+  updateUI();
+  await coop.updateProfile(state.name, state.fur);
+}
+
+document.getElementById('btn-save-pet').addEventListener('click', async () => {
+  const newName = document.getElementById('input-pet-name').value;
+  await saveMyProfile(newName, selectedFur);
+  addLog(`Profil hamstermu diubah jadi ${state.name}`);
   document.getElementById('modal-pet').classList.add('hidden');
 });
 
+// Welcome Modal for new visitors
+let welcomeFur = state.fur;
+document.querySelectorAll('#welcome-fur-picker .fur-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    welcomeFur = chip.dataset.fur;
+    document
+      .querySelectorAll('#welcome-fur-picker .fur-chip')
+      .forEach((c) => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  });
+});
+
+document.getElementById('btn-welcome-go').addEventListener('click', async () => {
+  const nameVal = document.getElementById('input-welcome-name').value || 'MOCHI';
+  await saveMyProfile(nameVal, welcomeFur);
+  sfx.heart();
+  document.getElementById('modal-welcome').classList.add('hidden');
+  showToast(`Halo ${state.name}! Selamat bermain 🐹`);
+});
+
+if (!localStorage.getItem('hammy_player')) {
+  document.getElementById('modal-welcome').classList.remove('hidden');
+}
+
 // Room Modal
 document.getElementById('btn-room').addEventListener('click', () => {
-  document.getElementById('input-player-name').value = coop.playerName;
+  document.getElementById('input-player-name').value = state.name;
   document.getElementById('input-room-code').value = coop.roomCode;
   const creds = coop.getCredentials();
   document.getElementById('input-sb-url').value = creds.url;
@@ -745,7 +889,8 @@ document.getElementById('btn-room').addEventListener('click', () => {
 document.getElementById('btn-join-room').addEventListener('click', async () => {
   const pName = document.getElementById('input-player-name').value;
   const rCode = document.getElementById('input-room-code').value;
-  const ok = await coop.connect(rCode, pName);
+  if (pName) await saveMyProfile(pName, state.fur);
+  const ok = await coop.connect(rCode, state.name);
   showToast(ok ? `Masuk room ${coop.roomCode}!` : 'Isi Supabase URL & Key dulu untuk online');
   document.getElementById('modal-room').classList.add('hidden');
 });
@@ -792,5 +937,5 @@ function loop(now) {
 // Init
 updateUI();
 addLog(`${state.name} lagi lari-larian di kandang!`);
-coop.connect();
+coop.connect(coop.roomCode, state.name);
 requestAnimationFrame(loop);

@@ -17,7 +17,7 @@
         <div class="brand">
           <span class="brand-badge">PIXEL PET</span>
           <h1 id="pet-title">MOCHI</h1>
-          <button id="btn-rename" class="icon-btn" title="Ganti Nama & Warna">✏️</button>
+          <button id="btn-rename" class="icon-btn" title="Ganti Nama & Warna Hamstermu">✏️</button>
         </div>
 
         <div class="room-bar">
@@ -156,6 +156,30 @@
         </div>
 
         <button id="btn-save-pet" class="pixel-btn accent full mt-12">Simpan</button>
+      </div>
+    </div>
+
+    <!-- Modal: Welcome Visitor -->
+    <div id="modal-welcome" class="modal hidden">
+      <div class="modal-card pixel-box">
+        <div class="modal-header">
+          <h3>🐹 Selamat Datang di Kandang!</h3>
+        </div>
+        <p class="modal-desc">
+          Setiap pengunjung punya hamster sendiri di kandang ini. Tulis namamu & pilih warna bulunya!
+        </p>
+        <label class="field-label">Namamu / Nama Hamster</label>
+        <input id="input-welcome-name" class="pixel-input" maxlength="12" placeholder="Misal: Mochi" />
+
+        <label class="field-label">Warna Bulu</label>
+        <div class="color-picker" id="welcome-fur-picker">
+          <button class="fur-chip selected" data-fur="golden" style="--c:#f5b062">Golden</button>
+          <button class="fur-chip" data-fur="snow" style="--c:#f7f4ef">Snow</button>
+          <button class="fur-chip" data-fur="choco" style="--c:#8d6e63">Choco</button>
+          <button class="fur-chip" data-fur="berry" style="--c:#f7a8b8">Berry</button>
+        </div>
+
+        <button id="btn-welcome-go" class="pixel-btn accent full mt-12">Masuk Kandang 🐹</button>
       </div>
     </div>
 

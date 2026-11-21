@@ -12,7 +12,8 @@ export class CoopRealtime {
     this.client = null;
     this.channel = null;
     this.clientId = Math.random().toString(36).slice(2, 10);
-    this.playerName = localStorage.getItem('hammy_player') || 'Kamu';
+    this.playerName = localStorage.getItem('hammy_player') || 'MOCHI';
+    this.playerFur = localStorage.getItem('hammy_fur') || 'golden';
     this.roomCode = this.getInitialRoom();
     this.onlineCount = 1;
     this.peers = [];
@@ -106,15 +107,33 @@ export class CoopRealtime {
 
     this.channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await this.channel.track({
-          clientId: this.clientId,
-          name: this.playerName,
-          joinedAt: Date.now(),
-        });
+        await this.trackPresence();
       }
     });
 
     return true;
+  }
+
+  async trackPresence() {
+    if (!this.channel) return;
+    await this.channel.track({
+      clientId: this.clientId,
+      name: this.playerName,
+      fur: this.playerFur,
+      joinedAt: Date.now(),
+    });
+  }
+
+  async updateProfile(name, fur) {
+    if (name) {
+      this.playerName = name.trim().slice(0, 12) || 'MOCHI';
+      localStorage.setItem('hammy_player', this.playerName);
+    }
+    if (fur) {
+      this.playerFur = fur;
+      localStorage.setItem('hammy_fur', this.playerFur);
+    }
+    await this.trackPresence();
   }
 
   send(event, payload) {
