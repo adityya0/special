@@ -57,6 +57,7 @@
             <button class="pixel-btn scene-btn" data-scene="garden">🌿 Taman Rumput</button>
             <button class="pixel-btn scene-btn" data-scene="explore">⛺ Explore Bukit</button>
             <button id="btn-minigame" class="pixel-btn accent scene-btn">🎮 Mini-Game</button>
+            <button id="btn-arena" class="pixel-btn scene-btn">🔫 Arena (2-3P)</button>
           </div>
 
           <div class="canvas-wrap">
@@ -230,6 +231,35 @@
         </div>
 
         <button id="btn-welcome-go" class="pixel-btn accent full mt-12">Masuk Kandang 🐹</button>
+      </div>
+    </div>
+
+    <!-- Full-Screen Top-Down Arena (2-3 Players) -->
+    <div id="arena-overlay" class="arena-overlay hidden">
+      <div class="arena-top">
+        <div id="arena-hud" class="arena-hud">❤️❤️❤️ | 🔫 Kosong</div>
+        <button id="btn-arena-exit" class="pixel-btn">✖ Keluar</button>
+      </div>
+
+      <canvas id="arena-canvas" width="480" height="300"></canvas>
+
+      <div id="arena-lobby" class="arena-lobby pixel-box">
+        <h3>🔫 Arena Top-Down (2-3 Orang)</h3>
+        <p class="modal-desc">
+          Kumpulkan senjata (1x dapat = 1x tembak!) &amp; nyawa (max 3 ❤️), sembunyi di balik batu!
+        </p>
+        <ul id="arena-ready-list" class="arena-ready-list"></ul>
+        <div class="row-gap mt-8">
+          <button id="btn-arena-ready" class="pixel-btn accent full">✅ Ready!</button>
+          <button id="btn-arena-start" class="pixel-btn full">🚀 Mulai</button>
+        </div>
+      </div>
+
+      <div class="arena-controls">
+        <div id="arena-joy-base" class="joy-base">
+          <div id="arena-joy-knob" class="joy-knob"></div>
+        </div>
+        <button id="btn-arena-fire" class="pixel-btn accent fire-btn" disabled>🔫 TEMBAK</button>
       </div>
     </div>
 

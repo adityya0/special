@@ -2,6 +2,7 @@ import './style.css';
 import { drawHamster, drawFoodSprite, drawHeart, drawAccessory } from './sprites.js';
 import { sfx } from './sound.js';
 import { CoopRealtime } from './realtime.js';
+import { HamsterArena } from './arena.js';
 
 const canvas = document.getElementById('cage-canvas');
 const ctx = canvas.getContext('2d');
@@ -249,6 +250,10 @@ const coop = new CoopRealtime({
     }
   },
   onRemoteAction: (payload) => {
+    if (payload.action && payload.action.startsWith('arena_')) {
+      arena.handleRemote(payload.action, payload.data, payload.senderId);
+      return;
+    }
     applyAction(payload.action, payload.data, payload.senderName, false, payload.senderId);
   },
   onRemoteCursor: ({ x, y, senderName }) => {
@@ -279,6 +284,12 @@ const coop = new CoopRealtime({
 
 // Spawn local visitor's hamster
 hamsters.set(coop.clientId, createHamster(coop.clientId, state.name, state.fur, 140, state.acc));
+
+const arena = new HamsterArena({
+  coop,
+  hamsters,
+  onExit: () => updateUI(),
+});
 
 function applyAction(action, data = {}, actor = state.name, broadcast = true, actorId = coop.clientId) {
   if (broadcast) {
@@ -1370,6 +1381,10 @@ document.querySelectorAll('.scene-btn[data-scene]').forEach((btn) => {
 
 document.getElementById('btn-minigame').addEventListener('click', () => {
   applyAction('mg_start');
+});
+
+document.getElementById('btn-arena').addEventListener('click', () => {
+  arena.open(true);
 });
 
 window.addEventListener('keydown', (e) => {
