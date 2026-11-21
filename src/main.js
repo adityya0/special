@@ -692,7 +692,7 @@ function drawCage() {
       frame = Math.floor(h.animTick * 3) % 2 ? 'idle1' : 'idle2';
     }
     drawHamster(ctx, h.x, h.y, frame, h.fur, h.flip, 2);
-    drawNameTag(h.x, h.y - 29, h.name, h.id === coop.clientId);
+    drawNameTag(h.x, h.y - 38, h.name, h.id === coop.clientId);
   }
 
   // Particles
