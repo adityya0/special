@@ -33,11 +33,11 @@ export class CoopRealtime {
     const url =
       import.meta.env.VITE_SUPABASE_URL ||
       localStorage.getItem('hammy_sb_url') ||
-      '';
+      'https://vuplsaqkpthvoawidced.supabase.co';
     const key =
       import.meta.env.VITE_SUPABASE_ANON_KEY ||
       localStorage.getItem('hammy_sb_key') ||
-      '';
+      'sb_publishable_fduFGYXOTVqHSTzI_g-LVQ_4jalBfw7';
     return { url: url.trim(), key: key.trim() };
   }
 
