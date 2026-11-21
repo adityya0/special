@@ -581,3 +581,62 @@ body {
 .app-footer strong {
   color: var(--accent-dark);
 }
+
+/* Mobile & Touch Polish */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+.modal-card {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 8px;
+  }
+
+  .pixel-box {
+    padding: 9px;
+  }
+
+  .brand h1 {
+    font-size: 13px;
+  }
+
+  .pixel-btn,
+  .emote-btn {
+    min-height: 36px;
+  }
+
+  .hug-btn {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-height: 460px) {
+  .joy-base {
+    width: 82px;
+    height: 82px;
+  }
+
+  .joy-knob {
+    width: 34px;
+    height: 34px;
+  }
+
+  .arena-top {
+    top: 6px;
+  }
+
+  .arena-hud {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}
